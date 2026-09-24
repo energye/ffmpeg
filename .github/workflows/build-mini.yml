@@ -1,0 +1,97 @@
+name: mini-decode-lib
+
+# 发版时一次编出全平台最小解码单文件（gpui video用）。
+# 功能清单见 mini/build-one.sh：解码 h264/hevc/aac，分流 mov/matroska，
+# 本地文件，编码/推流/网络全关，许可保持LGPL宽松。
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  linux-win:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build toolchain images (ubuntu18, 老glibc兼容)
+        run: |
+          docker build -f mini/Dockerfile -t ffbuild-mini .
+          docker build -f mini/Dockerfile-32 -t ffbuild-mini-32 .
+          docker build -f mini/Dockerfile-arm -t ffbuild-mini-arm .
+
+      - name: Build linux + win-x64 targets
+        run: |
+          mkdir -p out
+          docker run --rm -v "$PWD:/src" -v "$PWD/out:/out" ffbuild-mini /build-one.sh linux-x64
+          docker run --rm -v "$PWD:/src" -v "$PWD/out:/out" ffbuild-mini /build-one.sh linux-arm64
+          docker run --rm -v "$PWD:/src" -v "$PWD/out:/out" ffbuild-mini /build-one.sh win-x64
+          docker run --rm -v "$PWD:/src" -v "$PWD/out:/out" ffbuild-mini-32 /build-one.sh linux-386
+          docker run --rm -v "$PWD:/src" -v "$PWD/out:/out" ffbuild-mini-arm /build-one.sh linux-arm
+
+      - name: Build win-arm64 (llvm-mingw)
+        run: |
+          curl -sSL -o /tmp/llvm-mingw.tar.xz \
+            "https://github.com/mstorsjo/llvm-mingw/releases/download/20231003/llvm-mingw-20231003-msvcrt-ubuntu-20.04-x86_64.tar.xz"
+          mkdir -p /tmp/llvm-mingw && tar -xf /tmp/llvm-mingw.tar.xz -C /tmp/llvm-mingw --strip-components=1
+          LLVM_MINGW=/tmp/llvm-mingw SRC="$PWD" OUTDIR="$PWD/out" sh mini/build-win-arm64.sh
+
+      - name: Rename for release assets
+        run: |
+          mkdir -p dist
+          cp out/linux-x64/libgpui_ffmpeg.so dist/libgpui_ffmpeg-linux-x64.so
+          cp out/linux-arm64/libgpui_ffmpeg.so dist/libgpui_ffmpeg-linux-arm64.so
+          cp out/linux-386/libgpui_ffmpeg.so dist/libgpui_ffmpeg-linux-386.so
+          cp out/linux-arm/libgpui_ffmpeg.so dist/libgpui_ffmpeg-linux-arm.so
+          cp out/win-x64/libgpui_ffmpeg.dll dist/libgpui_ffmpeg-win-x64.dll
+          cp out/win-arm64/libgpui_ffmpeg.dll dist/libgpui_ffmpeg-win-arm64.dll
+          ls -la dist/
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mini-linux-win
+          path: dist/*
+
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install build tools
+        run: brew install nasm pkg-config
+
+      - name: Build darwin arm64 + x64 + universal
+        run: |
+          mkdir -p out
+          SRC="$PWD" OUTDIR="$PWD/out" sh mini/build-mac.sh
+          mkdir -p dist
+          cp out/darwin-arm64/libgpui_ffmpeg.dylib dist/libgpui_ffmpeg-darwin-arm64.dylib
+          cp out/darwin-x64/libgpui_ffmpeg.dylib dist/libgpui_ffmpeg-darwin-x64.dylib
+          cp out/darwin-universal/libgpui_ffmpeg.dylib dist/libgpui_ffmpeg-darwin-universal.dylib
+          ls -la dist/
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mini-mac
+          path: dist/*
+
+  publish:
+    needs: [linux-win, mac]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create commit-sha file
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          echo $GITHUB_SHA > dist/commit-sha
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/*

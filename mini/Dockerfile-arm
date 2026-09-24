@@ -1,5 +1,20 @@
 FROM ffbuild-mini:latest
 ENV DEBIAN_FRONTEND=noninteractive
+# arm 32位目标的交叉链（archive自带，无需加源）。
 RUN apt-get update && apt-get install -y --no-install-recommends \
       gcc-arm-linux-gnueabihf libc6-dev-armhf-cross \
     && rm -rf /var/lib/apt/lists/*
+# 安全库静态编一份（arm交叉）：同x64的理由。
+COPY mini/openssl-3.0.16.tar.gz /tmp/openssl.tgz
+RUN tar -xzf /tmp/openssl.tgz -C /tmp \
+ && cd /tmp/openssl-3.0.16 \
+ && ./Configure linux-armv4 --cross-compile-prefix=arm-linux-gnueabihf- -fPIC no-shared --prefix=/opt/ossl-arm \
+ && make -j"$(nproc)" && make install_sw \
+ && rm -rf /tmp/openssl-3.0.16 /tmp/openssl.tgz
+# zlib静态编一份（arm，同安全库的理由，不欠动态账）。
+COPY mini/zlib-1.3.1.tar.gz /tmp/zlib.tgz
+RUN tar -xzf /tmp/zlib.tgz -C /tmp \
+ && cd /tmp/zlib-1.3.1 \
+ && CC=arm-linux-gnueabihf-gcc ./configure --static --prefix=/opt/zlib-arm \
+ && make -j"$(nproc)" && make install \
+ && rm -rf /tmp/zlib-1.3.1 /tmp/zlib.tgz

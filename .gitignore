@@ -41,3 +41,6 @@
 /src
 /mapfile
 /tools/python/__pycache__/
+
+# gpui单文件编法：安全库源码包CI时现下，不进仓库
+mini/openssl-*.tar.gz

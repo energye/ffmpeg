@@ -24,11 +24,17 @@ EXPAT=${EXPAT_VER:-2.6.4}
 
 need() { # file url [fallback-url]
   if [ -f "$1" ]; then return 0; fi
+  # -f：HTTP 错误直接失败（不把 404 页面存成包）；下完先验包，
+  # 主源是坏包就换备用源重下（实测 zlib.net 回的不是 gzip）。
+  if curl -fSL --retry 3 --retry-all-errors --max-time 120 -o "$1" "$2" && verify "$1" 2>/dev/null; then
+    return 0
+  fi
+  echo "primary bad for $1, trying fallback" >&2
+  rm -f "$1"
   if [ -n "$3" ]; then
-    curl -sSL --retry 3 --retry-all-errors --max-time 120 -o "$1" "$2" || \
-    curl -sSL --retry 3 --retry-all-errors --max-time 180 -o "$1" "$3"
+    curl -fSL --retry 3 --retry-all-errors --max-time 180 -o "$1" "$3" && verify "$1"
   else
-    curl -sSL --retry 3 --retry-all-errors --max-time 120 -o "$1" "$2"
+    return 1
   fi
 }
 verify() { # file : list fully or fail
@@ -45,8 +51,8 @@ need fontconfig-$FC.tar.gz "https://www.freedesktop.org/software/fontconfig/rele
 need libass-$ASS.tar.gz "https://github.com/libass/libass/releases/download/$ASS/libass-$ASS.tar.gz"
 need openh264-$H264.tar.gz "https://github.com/cisco/openh264/archive/refs/tags/v$H264.tar.gz"
 need openssl-$OSSL.tar.gz "https://www.openssl.org/source/openssl-$OSSL.tar.gz"
-need zlib-$ZL.tar.gz "https://zlib.net/zlib-$ZL.tar.gz" \
-  "https://github.com/madler/zlib/releases/download/v$ZL/zlib-$ZL.tar.gz"
+need zlib-$ZL.tar.gz "https://github.com/madler/zlib/releases/download/v$ZL/zlib-$ZL.tar.gz" \
+  "https://zlib.net/zlib-$ZL.tar.gz"
 need expat-$EXPAT.tar.gz "https://github.com/libexpat/libexpat/releases/download/R_2_6_4/expat-$EXPAT.tar.gz"
 # 完整性门禁：坏包直接报错，不让半截包混进编译。
 for f in freetype-$FT.tar.gz harfbuzz-$HB.tar.xz fribidi-$FB.tar.xz fontconfig-$FC.tar.gz libass-$ASS.tar.gz openh264-$H264.tar.gz openssl-$OSSL.tar.gz zlib-$ZL.tar.gz expat-$EXPAT.tar.gz; do

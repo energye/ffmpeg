@@ -153,7 +153,11 @@ jobs:
           go-version: "1.25"
 
       - name: 装工具链（含 full 烧字件）
-        run: brew install nasm pkg-config freetype harfbuzz fontconfig fribidi libass openh264 || true
+        run: brew install nasm pkg-config meson ninja gperf freetype harfbuzz fontconfig fribidi libass openh264 || true
+
+      - name: 编 mac 外库静态 .a（仅 x64 full：brew 无 x86_64 瓶，源码编静态链）
+        if: env.ARCH == 'x64' && env.VARIANT == 'full'
+        run: sh dual/build-deps-mac.sh x64
 
       - name: 取配方并编单文件
         run: |

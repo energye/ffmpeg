@@ -29,18 +29,26 @@ fi
 
 # mac 编 x64 是交叉（-arch x86_64 皮），configure 的 pkg-config 检测
 # 跑的是 x86_64 二进制，brew 的 arm64 .pc 缺 x86_64 段就报找不到。
-# 先把 PKG_CONFIG_PATH 指到 brew 前缀；同时打印 config.log 里
-# libass 那段，下轮定位。
+# 自建 x86_64 静态链（build-deps-mac.sh 产物）优先；brew 的放后面兜底，
+# 顺序不能反（pkg-config 取第一个命中的）。
+MACDEPS="${MACDEPS_PREFIX:-/tmp/macdeps}"
+if [ "$ARCH" = "x64" ]; then
+  for d in freetype harfbuzz fribidi fontconfig ass openh264 expat; do
+    if [ -d "$MACDEPS/$d-x64/lib/pkgconfig" ]; then
+      export PKG_CONFIG_PATH="$MACDEPS/$d-x64/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+    fi
+  done
+fi
 if [ -d /opt/homebrew/lib/pkgconfig ]; then
-  export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+  export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:-}:/opt/homebrew/lib/pkgconfig"
 fi
 if [ -d /usr/local/lib/pkgconfig ]; then
-  export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+  export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:-}:/usr/local/lib/pkgconfig"
 fi
 if [ -d /opt/homebrew/opt/openh264/lib/pkgconfig ]; then
-  export PKG_CONFIG_PATH="/opt/homebrew/opt/openh264/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+  export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:-}:/opt/homebrew/opt/openh264/lib/pkgconfig"
 fi
-trap 'echo "=== config.log libass ==="; grep -a -A30 "check_func_headers ass/ass.h" ffbuild/config.log 2>/dev/null | head -45 || true' EXIT
+trap 'rc=$?; if [ $rc -ne 0 ]; then echo "=== config.log libass ==="; grep -a -A30 "check_func_headers ass/ass.h" ffbuild/config.log 2>/dev/null | head -45 || true; fi' EXIT
 # full 缺料容错（同 build-one.sh）：pkg-config 找不到就丢开关+连带滤镜。
 FULL_DEPS_MAC=""
 FULL_DROP=""

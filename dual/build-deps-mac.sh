@@ -145,8 +145,18 @@ EOF
   check_arch $PF/ass-$TAG/lib/libass.a $OARCH
 
   # openh264（静态；install 顺带装 dylib，删掉只留 .a，免误链动态）。
+  # 注意：install 装的是动态版 .pc（Libs 只有 -lopenh264，C++ 运行库藏在
+  # Libs.private 的 -lstdc++ 里，mac 上还没有这个库）；纯静态试链和终链都
+  # 要 C++ 运行库，直接把 Libs 补上 -lc++（mac 的 C++ 标准库），private 里
+  # 的 -lstdc++ 改名，否则 configure 报 openh264 找不到。
   rm -rf h264-$TAG && mkdir h264-$TAG && tar -xzf openh264-$H264.tar.gz -C h264-$TAG --strip-components=1
   (cd h264-$TAG && make CC="clang $ARCHC" CXX="clang++ $ARCHC" ARCH=$(arch_map "$TAG") USE_ASM=No -j"$NCPU" && make CC="clang $ARCHC" CXX="clang++ $ARCHC" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG install && rm -f $PF/openh264-$TAG/lib/libopenh264.*.dylib $PF/openh264-$TAG/lib/libopenh264.dylib)
+  OHPC=$PF/openh264-$TAG/lib/pkgconfig/openh264.pc
+  if [ -f "$OHPC" ]; then
+    sed -i '' 's/-lstdc++/-lc++/g' "$OHPC" && sed -i '' 's|^Libs: \(.*\)$|Libs: \1 -lc++|' "$OHPC"
+  else
+    echo "WARN: $OHPC 缺失" >&2
+  fi
   check_arch $PF/openh264-$TAG/lib/libopenh264.a $OARCH
 }
 

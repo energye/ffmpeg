@@ -48,7 +48,7 @@ fi
 if [ -d /opt/homebrew/opt/openh264/lib/pkgconfig ]; then
   export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:-}:/opt/homebrew/opt/openh264/lib/pkgconfig"
 fi
-trap 'rc=$?; if [ $rc -ne 0 ]; then echo "=== config.log libass ==="; grep -a -A30 "check_func_headers ass/ass.h" ffbuild/config.log 2>/dev/null | head -45 || true; fi' EXIT
+trap 'rc=$?; if [ $rc -ne 0 ]; then echo "=== config.log require lines ==="; grep -a "require_pkg_config\|^ERROR" ffbuild/config.log 2>/dev/null | tail -8 || true; echo "=== config.log tail ==="; tail -c 6000 ffbuild/config.log 2>/dev/null || true; fi' EXIT
 # full 缺料容错（同 build-one.sh）：pkg-config 找不到就丢开关+连带滤镜。
 FULL_DEPS_MAC=""
 FULL_DROP=""
@@ -110,6 +110,11 @@ case "$ARCH" in
   *) echo "unknown arch $ARCH" >&2; exit 2 ;;
 esac
 
+# 动 configure 前先报料：各外库 .pc 版本与 Libs，一眼看出谁缺谁错。
+echo "=== pkg-config diag ==="
+for pc in freetype2 harfbuzz fontconfig fribidi libass openh264; do
+  echo "--- $pc: ver=[$(pkg-config --modversion "$pc" 2>&1 || true)] libs=[$(pkg-config --libs "$pc" 2>&1 || true)]"
+done
 # mac 的 ld（这台旧版）没有等价开关，从源头治：mac 编时关掉 exr/phm
 # 两个解码器（都不是看片主流，Linux 不受影响），libavcodec 不再产 half2float.o。
 COMMON_MAC="$COMMON --disable-decoder=exr --disable-decoder=phm"

@@ -21,8 +21,13 @@
 
 ## 3. 调法：打标签触发，一次一个
 
-- 调试工作流：`.github/workflows/debug-mini.yml`（带版本维度，读标签里的 base/full）。
-- 发版工作流：`.github/workflows/build-mini.yml` 不动，16 个输出全绿后再把 `dual/` 合进去统一发版。
+- 调试工作流（三份，调哪个平台启用哪个，别的停掉）：
+  `.github/workflows/debug-linux.yml` ← `debug-mini-linux-*`，
+  `.github/workflows/debug-win.yml` ← `debug-mini-win-*`，
+  `.github/workflows/debug-macos.yml` ← `debug-mini-darwin-*`。
+  开关：`gh workflow disable/enable <文件名>`（或网页 Settings → Actions）。
+- 发版工作流：`.github/workflows/release.yml`（唯一构建入口），调通后把
+  验证过的步骤原样搬进去统一发版，平时不动。
 - 触发规矩（三条，互不串门）：
   平时提交代码（分支 push）谁也不触发；
   打 `debug-mini-*` 标签只触发调试流；
@@ -30,8 +35,8 @@
 - 标签格式：`debug-mini-<目标>-<版本>-<重试号>`，例如 `debug-mini-linux-x64-base-001`、`debug-mini-linux-x64-full-001`。
   同名标签推不上去，重试必须把尾巴数字加一。
 - 标签里写哪个目标，Actions 就只编哪个：
-  linux-/win- 开头跑 ubuntu-22.04，darwin- 开头跑 macos-latest。
-- Linux 约束：ubuntu18 容器里编（老 glibc 兼容），openssl+zlib 静态打进包，不欠动态账。
+  linux-/win- 开头跑 ubuntu，darwin- 开头跑 macos（runner 都用 latest）。
+- Linux 约束：ubuntu18 容器里编（glibc 2.27，老系统兼容），openssl+zlib 静态打进包，不欠动态账。
 
 ## 4. 顺序
 
@@ -67,7 +72,39 @@ linux-x64-base → linux-x64-full → linux-arm64-base/full → linux-386-base/f
   一次编出 8 架构 × 2 版本 = 16 个单文件 + darwin 通用包（base/full 各一），
   随 release 自动上传（publish 口径照 rwgpu cd.yml：分组 job + artifact +
   softprops/action-gh-release）。
-- 平台分工：linux-* 与 win-*（mingw/llvm-mingw 交叉）在 ubuntu-22.04 容器里编；
-  darwin-* 在 macos 原生编。win-full 烧字已与 linux/mac 对齐（w64/w64arm 烧字
-  静态链见 `dual/build-deps.sh`，终链与门禁见 `dual/build-one.sh`）。
+- 平台分工：linux-* 与 win-*（mingw/llvm-mingw 交叉）在 ubuntu18 容器里编；
+  darwin-* 在 macos 原生编，部署目标 10.15。win-full 烧字已与 linux/mac 对齐
+  （w64/w64arm 烧字静态链见 `dual/build-deps.sh`，终链与门禁见 `dual/build-one.sh`）。
+- 依赖预置在仓：`third_party/` 存 10 个验证过的源码包（约 100MB），`need()` 本地
+  优先，CI 不再碰外网；升级版本时换包并同步三处版本号（见 §8）。
 - `mini/` 最小版和旧发版逻辑已由 `dual/` 取代，到时再定去留。
+
+## 8. 新需求（构建基座与依赖升级，用户已确认，一起上）
+
+- runner 全部用最新：`ubuntu-latest`、`windows-latest`（将来真上原生时用）、
+  `macos-latest`。构建实际发生在 docker 容器里，runner 版本不影响产物。
+- linux 构建基座：`dual/Dockerfile` 换 `ubuntu:18.04`（源走 old-releases），
+  产物最低跑 glibc 2.27（Ubuntu 18.04 / CentOS 8 / Debian 10 一代）。
+- mac 部署目标：`MACOSX_DEPLOYMENT_TARGET=10.15`（原 10.13）。
+- 第三方依赖升到"最新且支持 FFmpeg 7.1"的版本（与 Dockerfile ENV、
+  build-deps 默认值、`third_party` 包三处同步）：
+
+  | 包 | 旧 | 新 | 备注 |
+  |---|---|---|---|
+  | freetype | 2.13.2 | 2.14.3 | savannah 最新稳定，纯 C |
+  | harfbuzz | 8.3.0 | 14.5.0 | meson ≥0.60，C++11；icu 继续关 |
+  | fribidi | 1.0.13 | 1.0.17 | meson ≥0.54 |
+  | fontconfig | 2.15.0 | 2.18.3 | 要 meson ≥1.11，只有 meson 构建；brew arm64 瓶同为 2.18.3 |
+  | libass | 0.17.1 | 0.17.5 | nasm 缺失只是警告降级；`USE_ASM=No` 口径不变 |
+  | openh264 | 2.4.1 | 2.6.0 | 纯 Makefile 工程 |
+  | openssl | 3.0.16 | 3.5.x | 不用 4.0（版本号宏体系变了，7.1 的 tls_openssl.c 未验证）；3.5 是长期支持线 |
+  | zlib | 1.3.1 | 1.3.2 | 小版本 |
+  | expat | 2.6.4 | 2.8.5 | 纯 C |
+  | libunibreak | 8.0 | 8.0 | 已是最新，不动 |
+
+- ubuntu18 官方源的 meson 太老，Dockerfile 里改 pip 装新 meson+ninja；
+  nasm、pkg-config、交叉工具链走 old-releases。
+- llvm-mingw 上游已无 18.04 包，换最新版的 `ubuntu-22.04` 包（静态自包含，
+  在 18.04 容器里照跑），`LLVM_MINGW_VER` 同步升级。
+- 实施顺序：先改 Dockerfile 和版本号 → 推 `debug-mini-linux-x64-full` 验证 →
+  按 §4 顺序逐平台调绿 → 全绿后合入 `release.yml`。

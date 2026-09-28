@@ -35,14 +35,19 @@ ENV OPENSSL_VER=3.5.8 \
 
 # Python 3.11（源码编到 /usr/local）：bionic 自带 python3.6 跑不动
 # meson 新版，而 fontconfig 2.18 只要 meson>=1.11 且只有 meson 构建。
-# 编完 pip 装新版 meson+ninja（harfbuzz/fribidi/fontconfig 都走它）。
+# 编完 pip 装新版 meson（harfbuzz/fribidi/fontconfig 都走它）。
+# 注意：configure 时 TMPDIR 必须指到大分区——make install 末尾 ensurepip
+# 解包 pip 轮子到 $TMPDIR，容器默认 /tmp 没问题，但有些环境 TMPDIR 指向
+# 小分区会报 No such file；显式导出 TMPDIR=/var/tmp 保底。
 COPY third_party/Python-3.11.16.tar.xz /tmp/Python.tar.xz
 RUN tar -xJf /tmp/Python.tar.xz -C /tmp \
  && cd /tmp/Python-3.11.16 \
- && ./configure --prefix=/usr/local --enable-optimizations=no \
+ && ./configure --prefix=/usr/local --enable-optimizations=no --without-ensurepip \
  && make -j"$(nproc)" && make install \
  && rm -rf /tmp/Python-3.11.16 /tmp/Python.tar.xz \
- && /usr/local/bin/python3 -m ensurepip \
+ && curl -sS --retry 3 -o /tmp/get-pip.py https://bootstrap.pypa.io/get-pip.py \
+ && /usr/local/bin/python3 /tmp/get-pip.py \
+ && rm -f /tmp/get-pip.py \
  && /usr/local/bin/pip3 install --no-cache-dir "meson>=1.11" \
  && ln -sf /usr/local/bin/meson /usr/bin/meson \
  && meson --version

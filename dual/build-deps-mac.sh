@@ -20,6 +20,7 @@ FC=${FONTCONFIG_VER:-2.15.0}
 ASS=${LIBASS_VER:-0.17.1}
 H264=${OPENH264_VER:-2.4.1}
 EXPAT=${EXPAT_VER:-2.6.4}
+UB=${LIBUNIBREAK_VER:-8.0}
 
 NCPU=$(sysctl -n hw.ncpu 2>/dev/null || echo 4)
 
@@ -52,7 +53,8 @@ need fontconfig-$FC.tar.gz "https://www.freedesktop.org/software/fontconfig/rele
 need libass-$ASS.tar.gz "https://github.com/libass/libass/releases/download/$ASS/libass-$ASS.tar.gz"
 need openh264-$H264.tar.gz "https://github.com/cisco/openh264/archive/refs/tags/v$H264.tar.gz"
 need expat-$EXPAT.tar.gz "https://github.com/libexpat/libexpat/releases/download/R_2_6_4/expat-$EXPAT.tar.gz"
-for f in freetype-$FT.tar.gz harfbuzz-$HB.tar.xz fribidi-$FB.tar.xz fontconfig-$FC.tar.gz libass-$ASS.tar.gz openh264-$H264.tar.gz expat-$EXPAT.tar.gz; do
+need libunibreak-$UB.tar.gz "https://github.com/adah1972/libunibreak/releases/download/libunibreak_8_0/libunibreak-$UB.tar.gz"
+for f in freetype-$FT.tar.gz harfbuzz-$HB.tar.xz fribidi-$FB.tar.xz fontconfig-$FC.tar.gz libass-$ASS.tar.gz openh264-$H264.tar.gz expat-$EXPAT.tar.gz libunibreak-$UB.tar.gz; do
   verify "$f" || { echo "BAD TARBALL $f，删掉重下" >&2; rm -f "$f"; exit 3; }
 done
 
@@ -131,9 +133,15 @@ EOF
   (cd fc-$TAG && PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig ./configure $HOST --disable-shared --enable-static --disable-docs --disable-libxml2 --with-expat=$PF/expat-$TAG --prefix=$PF/fontconfig-$TAG && make -C src fcalias.h fcaliastail.h fcftalias.h fcftaliastail.h fcobjshash.h && make -C src libfontconfig.la && make -C src install && make -C fontconfig install && mkdir -p $PF/fontconfig-$TAG/lib/pkgconfig && cp -f fontconfig.pc $PF/fontconfig-$TAG/lib/pkgconfig/)
   check_arch $PF/fontconfig-$TAG/lib/libfontconfig.a $OARCH
 
+  # libunibreak（静态，libass 的断行依赖；brew 只有 arm64 瓶，
+  # 不自建则 libass 链进 arm64 的 dylib，x64 试链报 init_linebreak 缺片）。
+  rm -rf ub-$TAG && mkdir ub-$TAG && tar -xzf libunibreak-$UB.tar.gz -C ub-$TAG --strip-components=1
+  (cd ub-$TAG && ./configure $HOST --disable-shared --enable-static --prefix=$PF/unibreak-$TAG && make -j"$NCPU" && make install)
+  check_arch $PF/unibreak-$TAG/lib/libunibreak.a $OARCH
+
   # libass（静态，指自建链）。
   rm -rf as-$TAG && mkdir as-$TAG && tar -xzf libass-$ASS.tar.gz -C as-$TAG --strip-components=1
-  (cd as-$TAG && PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/harfbuzz-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/fontconfig-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig ./configure $HOST --disable-shared --enable-static --prefix=$PF/ass-$TAG && make -j"$NCPU" && make install)
+  (cd as-$TAG && PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/harfbuzz-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/fontconfig-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig:$PF/unibreak-$TAG/lib/pkgconfig ./configure $HOST --disable-shared --enable-static --prefix=$PF/ass-$TAG && make -j"$NCPU" && make install)
   check_arch $PF/ass-$TAG/lib/libass.a $OARCH
 
   # openh264（静态；install 顺带装 dylib，删掉只留 .a，免误链动态）。

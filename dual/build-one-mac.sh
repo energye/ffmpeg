@@ -33,7 +33,7 @@ fi
 # 顺序不能反（pkg-config 取第一个命中的）。
 MACDEPS="${MACDEPS_PREFIX:-/tmp/macdeps}"
 if [ "$ARCH" = "x64" ]; then
-  for d in freetype harfbuzz fribidi fontconfig ass openh264 expat; do
+  for d in freetype harfbuzz fribidi fontconfig ass openh264 expat unibreak; do
     if [ -d "$MACDEPS/$d-x64/lib/pkgconfig" ]; then
       export PKG_CONFIG_PATH="$MACDEPS/$d-x64/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
     fi

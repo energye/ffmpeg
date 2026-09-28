@@ -43,14 +43,17 @@ verify() { # file : list fully or fail
     *) tar tzf "$1" >/dev/null ;;
   esac
 }
-need freetype-$FT.tar.gz "https://download.savannah.gnu.org/releases/freetype/freetype-$FT.tar.gz"
+need freetype-$FT.tar.gz "https://download.savannah.gnu.org/releases/freetype/freetype-$FT.tar.gz" \
+  "https://download-mirror.savannah.gnu.org/releases/freetype/freetype-$FT.tar.gz"
 need harfbuzz-$HB.tar.xz "https://github.com/harfbuzz/harfbuzz/releases/download/$HB/harfbuzz-$HB.tar.xz"
 need fribidi-$FB.tar.xz "https://github.com/fribidi/fribidi/releases/download/v$FB/fribidi-$FB.tar.xz" \
   "https://download-mirror.savannah.gnu.org/releases/fribidi/fribidi-$FB.tar.xz"
-need fontconfig-$FC.tar.gz "https://www.freedesktop.org/software/fontconfig/release/fontconfig-$FC.tar.gz"
+need fontconfig-$FC.tar.gz "https://www.freedesktop.org/software/fontconfig/release/fontconfig-$FC.tar.gz" \
+  "https://gitlab.freedesktop.org/fontconfig/fontconfig/-/archive/$FC/fontconfig-$FC.tar.gz"
 need libass-$ASS.tar.gz "https://github.com/libass/libass/releases/download/$ASS/libass-$ASS.tar.gz"
 need openh264-$H264.tar.gz "https://github.com/cisco/openh264/archive/refs/tags/v$H264.tar.gz"
-need openssl-$OSSL.tar.gz "https://www.openssl.org/source/openssl-$OSSL.tar.gz"
+need openssl-$OSSL.tar.gz "https://www.openssl.org/source/openssl-$OSSL.tar.gz" \
+  "https://github.com/openssl/openssl/releases/download/openssl-$OSSL/openssl-$OSSL.tar.gz"
 need zlib-$ZL.tar.gz "https://github.com/madler/zlib/releases/download/v$ZL/zlib-$ZL.tar.gz" \
   "https://zlib.net/zlib-$ZL.tar.gz"
 need expat-$EXPAT.tar.gz "https://github.com/libexpat/libexpat/releases/download/R_2_6_4/expat-$EXPAT.tar.gz"

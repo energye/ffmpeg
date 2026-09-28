@@ -45,6 +45,7 @@ RUN tar -xJf /tmp/Python.tar.xz -C /tmp \
  && ./configure --prefix=/usr/local --enable-optimizations=no --without-ensurepip \
  && make -j"$(nproc)" && make install \
  && rm -rf /tmp/Python-3.11.16 /tmp/Python.tar.xz \
+ && cd /tmp \
  && curl -sS --retry 3 -o /tmp/get-pip.py https://bootstrap.pypa.io/get-pip.py \
  && /usr/local/bin/python3 /tmp/get-pip.py \
  && rm -f /tmp/get-pip.py \

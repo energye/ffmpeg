@@ -274,7 +274,7 @@ OpenH264Version WelsGetCodecVersion(void) {
 EOF
   OHSHIM_OBJ=""
   case "$TAG" in
-    w64|w64arm|arm64|arm|386)
+    x64|w64|w64arm|arm64|arm|386)
       (cd h264-$TAG && $CC -c -fPIC -Icodec/api ohver-shim.c -o ohver-shim.o) && OHSHIM_OBJ="h264-$TAG/ohver-shim.o" || echo "WARN: 版本探针垫片没编上（$TAG），configure 旧探针可能挂" >&2
       ;;
   esac

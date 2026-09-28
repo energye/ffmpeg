@@ -84,8 +84,11 @@ case "$ARCH" in
   *) echo "unknown arch $ARCH" >&2; exit 2 ;;
 esac
 
+# mac 的 ld（这台旧版）没有等价开关，从源头治：mac 编时关掉 exr/phm
+# 两个解码器（都不是看片主流，Linux 不受影响），libavcodec 不再产 half2float.o。
+COMMON_MAC="$COMMON --disable-decoder=exr --disable-decoder=phm"
 # shellcheck disable=SC2086
-"$SRC/configure" $COMMON $FULL_DEPS_MAC $MAC_BASE $ARCHFLAG --enable-pic --disable-x86asm
+"$SRC/configure" $COMMON_MAC $FULL_DEPS_MAC $MAC_BASE $ARCHFLAG --enable-pic --disable-x86asm
 make -j"$(sysctl -n hw.ncpu)"
 
 WHOLE="-Wl,-all_load libavformat/libavformat.a libavcodec/libavcodec.a libswscale/libswscale.a libavfilter/libavfilter.a libswresample/libswresample.a libavdevice/libavdevice.a libavutil/libavutil.a"
@@ -100,9 +103,7 @@ if [ "$V" = "full" ]; then
   FULL_EXT="$FULL_EXT $OH"
 fi
 # shellcheck disable=SC2086
-# MULDEFS：exr/phm 解码器把 half2float.o 带进 libavcodec，和 libswscale 自带的
-# 同名文件重复定义（实现一样，符号冲突）。Linux 用 --allow-multiple-definition
-# 取第一份；mac 新 ld 等价开关是 -allow_duplicate_definitions，和 -all_load 同用。
-$MAC_CC -dynamiclib -o "$OUT/$LIB" $WHOLE -Wl,-allow_duplicate_definitions $FULL_EXT -lm -lpthread -ldl -lz \
+# MULDEFS 见上：mac 关掉 exr/phm 后冲突消失，这里直接链原包。
+$MAC_CC -dynamiclib -o "$OUT/$LIB" $WHOLE $FULL_EXT -lm -lpthread -ldl -lz \
   -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework Security
 ls -la "$OUT/$LIB"

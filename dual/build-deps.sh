@@ -80,21 +80,21 @@ build_one_arch() { # arch-tag cc cxx
   case "$TAG" in
     x64) ZCROSS="" ;;
     arm64) ZCROSS="aarch64-linux-gnu-" ;;
-    386) ZCROSS="" ;;
+    386) ZCROSS="i686-linux-gnu-" ;;
     arm) ZCROSS="arm-linux-gnueabihf-" ;;
     w64) ZCROSS="x86_64-w64-mingw32-" ;;
     w64arm) ZCROSS="aarch64-w64-mingw32-" ;;
   esac
   (cd zl-$TAG && CC="$CC" CFLAGS="-fPIC" ./configure --static --prefix=$PF/zlib-$TAG && make -j"$(nproc)" CC="$CC" AR="${ZCROSS}ar" RANLIB="${ZCROSS}ranlib" && make install && ${ZCROSS}ranlib $PF/zlib-$TAG/lib/libz.a)
   # openssl（静态；w64/w64arm 走系统 schannel，不编）。
-  # 386 用宿主 gcc -m32，内核头靠镜像里 /usr/include/i386-linux-gnu/asm
-  # 软链接顶上（见 Dockerfile），apps 照常编，不用跳过。
+  # 386 用独立交叉包 i686-linux-gnu（不用 -m32：multilib 包与 arm 交叉包
+  # 在 bionic 上互斥；openssl 走 linux-generic32 + 交叉前缀）。
   if [ "$TAG" != "w64" ] && [ "$TAG" != "w64arm" ]; then
     rm -rf ossl-$TAG && mkdir ossl-$TAG && tar -xzf openssl-$OSSL.tar.gz -C ossl-$TAG --strip-components=1
     case "$TAG" in
       x64) OSSL_TGT="linux-x86_64" OSSL_PFX="" ;;
       arm64) OSSL_TGT="linux-aarch64" OSSL_PFX="--cross-compile-prefix=aarch64-linux-gnu-" ;;
-      386) OSSL_TGT="linux-x86" OSSL_PFX="" ;;
+      386) OSSL_TGT="linux-generic32" OSSL_PFX="--cross-compile-prefix=i686-linux-gnu-" ;;
       arm) OSSL_TGT="linux-armv4" OSSL_PFX="--cross-compile-prefix=arm-linux-gnueabihf-" ;;
     esac
     # openssl 的 Configure 自己管 CC：$OSSL_PFX 里带了交叉前缀，
@@ -103,7 +103,6 @@ build_one_arch() { # arch-tag cc cxx
     # make 时再显式给 CC/AR（Configure 生成的 Makefile 默认 CC=cc，交叉要盖掉）。
     case "$TAG" in
       x64) OSSL_MAKE_CC="gcc" ;;
-      386) OSSL_MAKE_CC="gcc -m32" ;;
       *) OSSL_MAKE_CC="$CC" ;;
     esac
     (cd ossl-$TAG && perl ./Configure --prefix=$PF/ossl-$TAG no-shared -fPIC no-tests $OSSL_TGT $OSSL_PFX && make -j"$(nproc)" CC="$OSSL_MAKE_CC" AR="${OSSL_PFX#--cross-compile-prefix=}ar" RANLIB="${OSSL_PFX#--cross-compile-prefix=}ranlib" && make install_sw)
@@ -167,16 +166,16 @@ EOF
       meson_cross="--cross-file /tmp/meson-cross-arm.ini" ;;
     386) cat > /tmp/meson-cross-386.ini <<'EOF'
 [binaries]
-c = 'gcc'
-cpp = 'g++'
-ar = 'ar'
-strip = 'strip'
+c = 'i686-linux-gnu-gcc'
+cpp = 'i686-linux-gnu-g++'
+ar = 'i686-linux-gnu-ar'
+strip = 'i686-linux-gnu-strip'
 pkgconfig = 'pkg-config'
 [properties]
-c_args = ['-m32', '-fPIC']
-c_link_args = ['-m32']
-cpp_args = ['-m32', '-fPIC']
-cpp_link_args = ['-m32']
+c_args = ['-fPIC']
+c_link_args = []
+cpp_args = ['-fPIC']
+cpp_link_args = []
 [host_machine]
 system = 'linux'
 cpu_family = 'x86'
@@ -213,9 +212,9 @@ endian = 'little'
 EOF
       meson_cross="--cross-file /tmp/meson-cross-w64arm.ini" ;;
   esac
-  # 386 的 meson 交叉：c_args 加 -m32（cross 文件里写死了 gcc，得补旗标）。
+  # 386 的 meson 交叉：独立交叉包，不用补 -m32 旗标。
   case "$TAG" in
-    386) MESON_CFLAGS="-fPIC -m32" MESON_CXXFLAGS="-fPIC -m32" ;;
+    386) MESON_CFLAGS="-fPIC" MESON_CXXFLAGS="-fPIC" ;;
     *) MESON_CFLAGS="-fPIC" MESON_CXXFLAGS="-fPIC" ;;
   esac
   rm -rf hb-$TAG && mkdir hb-$TAG && tar -xJf harfbuzz-$HB.tar.xz -C hb-$TAG --strip-components=1
@@ -283,7 +282,7 @@ case "$WHICH" in
   need-only) echo "need-only done (tarballs verified above)" ;;
   x64) build_one_arch x64 gcc g++ ;;
   arm64) build_one_arch arm64 aarch64-linux-gnu-gcc aarch64-linux-gnu-g++ ;;
-  386) build_one_arch 386 "gcc -m32" "g++ -m32" ;;
+  386) build_one_arch 386 i686-linux-gnu-gcc i686-linux-gnu-g++ ;;
   arm) build_one_arch arm arm-linux-gnueabihf-gcc arm-linux-gnueabihf-g++ ;;
   w64) build_one_arch w64 x86_64-w64-mingw32-gcc x86_64-w64-mingw32-g++ ;;
   w64arm) build_one_arch w64arm aarch64-w64-mingw32-clang "aarch64-w64-mingw32-clang++" ;;

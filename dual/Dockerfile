@@ -12,7 +12,7 @@ RUN printf 'deb http://archive.ubuntu.com/ubuntu/ bionic main restricted univers
       mingw-w64 ninja-build \
       gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev-arm64-cross \
       gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-dev-armhf-cross \
-      gcc-multilib g++-multilib libc6-dev-i386 \
+      gcc-i686-linux-gnu g++-i686-linux-gnu libc6-dev-i386-cross \
       libxml2-dev libva-dev libvdpau-dev libdrm-dev libexpat1-dev \
       zlib1g-dev liblzma-dev \
       libssl-dev libffi-dev libbz2-dev libsqlite3-dev libreadline-dev \
@@ -70,11 +70,8 @@ RUN mkdir -p /usr/local/llvm-mingw && \
     rm -f /tmp/llvm-mingw.tar.xz
 ENV PATH="/usr/local/llvm-mingw/bin:${PATH}"
 
-# 386 用宿主 gcc -m32（非独立交叉包），内核头是 x86_64 那套；
-# openssl 的 apps 在 -m32 下找 i386-linux-gnu/asm 找不到（只有
-# x86_64-linux-gnu/asm），链个同构软链接顶上（头文件内容同构，实测可用）。
-RUN mkdir -p /usr/include/i386-linux-gnu && \
-    ln -sfn ../x86_64-linux-gnu/asm /usr/include/i386-linux-gnu/asm
+# 386 用独立交叉包 i686-linux-gnu（不用宿主 gcc -m32：multilib 与
+# arm 交叉包在 bionic 上互斥，装不上；独立交叉包无此问题）。
 # 构建上下文是 ffmpeg 仓根目录（docker build -f dual/Dockerfile .）。
 COPY dual/build-deps.sh /build-deps.sh
 RUN chmod +x /build-deps.sh

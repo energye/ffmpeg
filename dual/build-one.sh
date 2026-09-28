@@ -143,8 +143,7 @@ case "$T" in
     CFG="$COMMON $FULL_DEPS_LINUX $CROSS_LINUX --extra-cflags=-I$OSSL/include --extra-cflags=-I$ZLIB/include --extra-ldflags=-L$(ossl_lib $OSSL) --extra-ldflags=-L$ZLIB/lib --enable-cross-compile --cross-prefix=aarch64-linux-gnu- --arch=aarch64 --target-os=linux"
     CC=aarch64-linux-gnu-gcc ;;
   linux-386)
-    printf '#!/bin/sh\nexec gcc -m32 "$@"\n' > "$BLD/gcc-m32"
-    chmod +x "$BLD/gcc-m32"
+    # 386 用独立交叉包（不用 -m32，见 Dockerfile 注释）。
     OSSL=/opt/ossl-386
     ZLIB=/opt/zlib-386
     export PKG_CONFIG_LIBDIR=$(ossl_lib $OSSL)/pkgconfig:/usr/lib/i386-linux-gnu/pkgconfig
@@ -154,8 +153,8 @@ case "$T" in
       done
       export PKG_CONFIG_LIBDIR
     fi
-    CFG="$COMMON $FULL_DEPS_LINUX $CROSS_LINUX --extra-cflags=-I$OSSL/include --extra-cflags=-I$ZLIB/include --extra-ldflags=-L$(ossl_lib $OSSL) --extra-ldflags=-L$ZLIB/lib --arch=x86_32 --target-os=linux --cc=$BLD/gcc-m32"
-    CC="$BLD/gcc-m32" ;;
+    CFG="$COMMON $FULL_DEPS_LINUX $CROSS_LINUX --extra-cflags=-I$OSSL/include --extra-cflags=-I$ZLIB/include --extra-ldflags=-L$(ossl_lib $OSSL) --extra-ldflags=-L$ZLIB/lib --enable-cross-compile --cross-prefix=i686-linux-gnu- --arch=x86_32 --target-os=linux"
+    CC=i686-linux-gnu-gcc ;;
   linux-arm)
     OSSL=/opt/ossl-arm
     ZLIB=/opt/zlib-arm

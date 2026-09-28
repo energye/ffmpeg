@@ -88,7 +88,7 @@ MAC_CC=cc
 case "$ARCH" in
   arm64) ARCHFLAG="--arch=arm64 --target-os=darwin" ;;
   x64)
-    printf '#!/bin/sh\nexec clang -arch x86_64 "$@"\n' > "$BLD/clang-x64"
+    printf '#!/bin/sh\nexec cc -arch x86_64 "$@"\n' > "$BLD/clang-x64"
     chmod +x "$BLD/clang-x64"
     MAC_CC="$BLD/clang-x64"
     ARCHFLAG="--arch=x86_64 --target-os=darwin --cc=$BLD/clang-x64"

@@ -107,7 +107,10 @@ jobs:
         run: |
           f=$(find "out/$TARGET" -type f | head -1)
           echo "checking $f"
-          if strings "$f" | grep -iE "libx264|libx265|libfdk_aac" | head -3; then
+          echo "--- matched GPL/nonfree strings (empty means clean) ---"
+          strings "$f" | grep -iE "libx264|libx265|libfdk_aac" | sort -u | head -20 || true
+          echo "--- end of matches ---"
+          if strings "$f" | grep -iqE "libx264|libx265|libfdk_aac"; then
             echo "GPL/nonfree 库混入，拒绝入库"; exit 1
           fi
           strings "$f" | grep -i "LGPL version 2.1" | head -2

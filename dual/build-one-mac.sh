@@ -94,7 +94,10 @@ case "$ARCH" in
     printf '#!/bin/sh\nexec clang -arch x86_64 "$@"\n' > "$BLD/clang-x64"
     chmod +x "$BLD/clang-x64"
     MAC_CC="$BLD/clang-x64"
-    ARCHFLAG="--arch=x86_64 --target-os=darwin --cc=$BLD/clang-x64"
+    # x64 跑在 arm64 机器上是交叉：--pkg-config 固定用真 x86_64 的 pkg-config，
+    # 不让 configure 按交叉前缀去找不存在的 x86_64-apple-darwin-pkg-config
+    # （实测找不到就回退 false，外库检测全灭）。
+    ARCHFLAG="--arch=x86_64 --target-os=darwin --cc=$BLD/clang-x64 --pkg-config=pkg-config"
     ;;
   *) echo "unknown arch $ARCH" >&2; exit 2 ;;
 esac

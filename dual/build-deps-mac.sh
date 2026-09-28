@@ -124,10 +124,11 @@ EOF
   (cd fb-$TAG && meson setup --cross-file /tmp/meson-mac-$TAG.ini -Dtests=false -Ddocs=false -Dbin=false '-Dc_args=-arch x86_64' '-Dcpp_args=-arch x86_64' '-Dc_link_args=-arch x86_64' '-Dcpp_link_args=-arch x86_64' --default-library=static --libdir=lib --prefix=$PF/fribidi-$TAG build && ninja -C build && ninja -C build install)
   check_arch $PF/fribidi-$TAG/lib/libfribidi.a $OARCH
 
-  # fontconfig（静态，指自建三件；libxml2 关，文档关；不编测试目录：
-  # test-conf 链 brew 的 arm64 json-c，x64 下必挂，库本身不受影响）。
+  # fontconfig（静态，指自建三件；libxml2 关，文档关；只编装库相关目标，
+  # 不进 test 目录：test-conf 链 brew 的 arm64 json-c 必挂，且顶层 make
+  # 会连带编它；src 子目录目标在源码树内编，别名头需先在顶层 make 生成）。
   rm -rf fc-$TAG && mkdir fc-$TAG && tar -xzf fontconfig-$FC.tar.gz -C fc-$TAG --strip-components=1
-  (cd fc-$TAG && PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig ./configure $HOST --disable-shared --enable-static --disable-docs --disable-libxml2 --with-expat=$PF/expat-$TAG --prefix=$PF/fontconfig-$TAG && make -j"$NCPU" -C src libfontconfig.la && make -C src install && make install-data)
+  (cd fc-$TAG && PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig ./configure $HOST --disable-shared --enable-static --disable-docs --disable-libxml2 --with-expat=$PF/expat-$TAG --prefix=$PF/fontconfig-$TAG && make -j"$NCPU" -C src libfontconfig.la fcalias.h fcaliastail.h fcftalias.h fcftaliastail.h stamp-h1 && make -C src install && make install-data)
   check_arch $PF/fontconfig-$TAG/lib/libfontconfig.a $OARCH
 
   # libass（静态，指自建链）。

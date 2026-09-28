@@ -102,9 +102,9 @@ fi
 # shellcheck disable=SC2086
 # MULDEFS：exr/phm 解码器把 half2float.o 带进 libavcodec，和 libswscale 自带的
 # 同名文件重复定义（实现一样，符号冲突）。Linux 用 --allow-multiple-definition
-# 取第一份；mac 的 ld 没有等价开关，做法是拆出 libswscale 的 half2float.o，
-# 只链剩下部分（libavcodec 那份保留，解码照常用）。
-mkdir -p "$BLD/nodup" && rm -f "$BLD/nodup"/half2float.o "$BLD/nodup"/libswscale_nodup.a \
+# 取第一份；mac 的 ld 没有等价开关，做法是拆开 libswscale.a 只扔掉里面的
+# half2float.o（aarch64/ 目录的 neon 对象一个不少全保留），再重打回包。
+mkdir -p "$BLD/nodup" && rm -f "$BLD/nodup"/*.o "$BLD/nodup"/*.a \
   && (cd "$BLD/nodup" && ar x "$BLD/libswscale/libswscale.a" && rm -f half2float.o \
       && libtool -static -o libswscale_nodup.a ./*.o) \
   || { echo "FAIL: 拆 half2float.o 失败" >&2; exit 1; }

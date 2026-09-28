@@ -42,9 +42,11 @@ linux-x64-base → linux-x64-full → linux-arm64-base/full → linux-386-base/f
 
 1. 改代码（只改本次目标相关的文件）。
 2. 推送到远端（提交前 `git status` 只加本次文件，不加别的；分支推送不触发任何工作流，放心推）。
-3. 打标签并推送标签，例如：
+3. 打标签并推送标签（推送要登录，暂由用户执行），例如：
    `git tag debug-mini-linux-x64-base-001 && git push origin debug-mini-linux-x64-base-001`
 4. 等 Actions 跑完，看日志修问题，修完重试号加一再打标签。
+   过线标准：base 版解码器在、能看片；full 版写盒+烧字三滤镜+openh264+ass 编码全在；
+   两档都不能含 x264/x265/fdk 字样（工作流里有门禁，缺一项就算红）。
 
 调试时不用保留中间产物，产物只要编出来、校验存在就行；最终发版时统一整合。
 
@@ -58,5 +60,7 @@ linux-x64-base → linux-x64-full → linux-arm64-base/full → linux-386-base/f
 
 - `dual/`、`debug-mini.yml`、本开工文档都是本次的新文件，已提交推送。
 - 触发条件已验过：分支推送不触发任何流；`debug-mini-*` 标签只进调试流；release 只进发版流。
-- 发版流程无运行记录，16 个输出全绿之前不动 `build-mini.yml` 和 `mini/`。
+- 发版流程无运行记录，16 个输出全绿之前不动 `build-mini.yml` 和 `mini/`；全绿后把 `dual/` 接进发版流（16 个一次编完，随 release 发布），`mini/` 最小版到时再定去留。
+- 已知坑：工作流里 action 版本号（checkout/upload@v7、download@v8）是照抄仓里原文件的，
+  首跑如果连检出这步都红，先查版本号是否存在。
 - 下一步：打第一个标签 `debug-mini-linux-x64-base-001` 开调。

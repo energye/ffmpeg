@@ -29,7 +29,8 @@ fi
 
 # mac 编 x64 是交叉（-arch x86_64 皮），configure 的 pkg-config 检测
 # 跑的是 x86_64 二进制，brew 的 arm64 .pc 缺 x86_64 段就报找不到。
-# 先把 PKG_CONFIG_PATH 指到 brew 前缀。
+# 先把 PKG_CONFIG_PATH 指到 brew 前缀；同时打印 config.log 里
+# libass 那段，下轮定位。
 if [ -d /opt/homebrew/lib/pkgconfig ]; then
   export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 fi
@@ -39,6 +40,7 @@ fi
 if [ -d /opt/homebrew/opt/openh264/lib/pkgconfig ]; then
   export PKG_CONFIG_PATH="/opt/homebrew/opt/openh264/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 fi
+trap 'echo "=== config.log libass ==="; grep -a -A15 "check_pkg_config libass" ffbuild/config.log 2>/dev/null | head -40 || true' EXIT
 # full 缺料容错（同 build-one.sh）：pkg-config 找不到就丢开关+连带滤镜。
 FULL_DEPS_MAC=""
 FULL_DROP=""

@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Debian 10 一代）；18.04 已 EOL，apt 源走 old-releases。
 # 基础版零外库；高级版烧字件 + openh264 全静态编进单文件（-fPIC no-shared），
 # 用户机器不用装，许可保持 LGPL 2.1（x264/x265/fdk 一个不装）。
-RUN printf 'deb http://archive.ubuntu.com/ubuntu/ bionic main restricted universe multiverse\ndeb http://security.ubuntu.com/ubuntu/ bionic-security main restricted universe multiverse\n' > /etc/apt/sources.list \
+RUN printf 'deb http://archive.ubuntu.com/ubuntu/ bionic main restricted universe multiverse\ndeb http://archive.ubuntu.com/ubuntu/ bionic-updates main restricted universe multiverse\ndeb http://security.ubuntu.com/ubuntu/ bionic-security main restricted universe multiverse\n' > /etc/apt/sources.list \
  && rm -f /etc/apt/sources.list.d/*.list \
  && apt-get update && apt-get install -y --no-install-recommends \
       build-essential nasm pkg-config perl git curl ca-certificates \

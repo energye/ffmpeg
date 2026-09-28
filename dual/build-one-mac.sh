@@ -100,9 +100,16 @@ if [ "$V" = "full" ]; then
   FULL_EXT="$FULL_EXT $OH"
 fi
 # shellcheck disable=SC2086
-# MULDEFS：exr 解码器把 half2float.o 带进 libavcodec，和 libswscale 自带的
-# 同名文件重复定义（内容一样）。Linux 用 --allow-multiple-definition 取第一份；
-# mac 的 ld 等价开关是 -Wl,-m（allow_multiple_definition），和 -all_load 同用。
-$MAC_CC -dynamiclib -o "$OUT/$LIB" $WHOLE -Wl,-m $FULL_EXT -lm -lpthread -ldl -lz \
+# MULDEFS：exr/phm 解码器把 half2float.o 带进 libavcodec，和 libswscale 自带的
+# 同名文件重复定义（实现一样，符号冲突）。Linux 用 --allow-multiple-definition
+# 取第一份；mac 的 ld 没有等价开关，做法是拆出 libswscale 的 half2float.o，
+# 只链剩下部分（libavcodec 那份保留，解码照常用）。
+mkdir -p "$BLD/nodup" && rm -f "$BLD/nodup"/half2float.o "$BLD/nodup"/libswscale_nodup.a \
+  && (cd "$BLD/nodup" && ar x "$BLD/libswscale/libswscale.a" && rm -f half2float.o \
+      && libtool -static -o libswscale_nodup.a ./*.o) \
+  || { echo "FAIL: 拆 half2float.o 失败" >&2; exit 1; }
+SWSCALE_NODUP="$BLD/nodup/libswscale_nodup.a"
+WHOLE_NODUP="-Wl,-all_load libavformat/libavformat.a libavcodec/libavcodec.a $SWSCALE_NODUP libavfilter/libavfilter.a libswresample/libswresample.a libavdevice/libavdevice.a libavutil/libavutil.a"
+$MAC_CC -dynamiclib -o "$OUT/$LIB" $WHOLE_NODUP $FULL_EXT -lm -lpthread -ldl -lz \
   -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework Security
 ls -la "$OUT/$LIB"

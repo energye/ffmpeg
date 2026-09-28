@@ -77,9 +77,10 @@ build_one_arch() { # arch-tag
   (cd ex-$TAG && ./configure $HOST --disable-shared --enable-static --without-examples --without-tests --without-docbook --prefix=$PF/expat-$TAG && make -j"$NCPU" && make install)
   check_arch $PF/expat-$TAG/lib/libexpat.a $OARCH
 
-  # freetype（静态，harfbuzz 关，免循环依赖）。
+  # freetype（静态，harfbuzz/brotli 全关：brotli 只有 arm64 瓶，
+  # 开着会链进 arm64 的 dylib，x64 试链直接挂）。
   rm -rf ft-$TAG && mkdir ft-$TAG && tar -xzf freetype-$FT.tar.gz -C ft-$TAG --strip-components=1
-  (cd ft-$TAG && ./configure $HOST --disable-shared --enable-static --without-harfbuzz --without-bzip2 --without-png --prefix=$PF/freetype-$TAG && make -j"$NCPU" && make install)
+  (cd ft-$TAG && ./configure $HOST --disable-shared --enable-static --without-harfbuzz --without-bzip2 --without-png --without-brotli --prefix=$PF/freetype-$TAG && make -j"$NCPU" && make install)
   check_arch $PF/freetype-$TAG/lib/libfreetype.a $OARCH
 
   # meson 交叉描述（Darwin 同系统跨架构，native 配 CFLAGS 不认，必须明说）。

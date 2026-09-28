@@ -102,13 +102,16 @@ fi
 # shellcheck disable=SC2086
 # MULDEFS：exr/phm 解码器把 half2float.o 带进 libavcodec，和 libswscale 自带的
 # 同名文件重复定义（实现一样，符号冲突）。Linux 用 --allow-multiple-definition
-# 取第一份；mac 的 ld 没有等价开关，做法是拆开 libswscale.a 只扔掉里面的
-# half2float.o（aarch64/ 目录的 neon 对象一个不少全保留），再重打回包。
+# 取第一份；mac 的 ld 没有等价开关，做法是链接时 --unexported_symbol 思路不行，
+# 这里用 -Wl,-unexported_symbol 也不对——正确做法是让 libswscale 那份 half2float
+# 的符号弱化：抽出 libswscale.a 的 half2float.o，用 ld -r -unexported_symbol
+# 重链成隐藏符号后再打回包，libavcodec 那份保持全局，两边共存不冲突。
 mkdir -p "$BLD/nodup" && rm -f "$BLD/nodup"/*.o "$BLD/nodup"/*.a \
-  && (cd "$BLD/nodup" && ar x "$BLD/libswscale/libswscale.a" && rm -f half2float.o \
+  && (cd "$BLD/nodup" && ar x "$BLD/libswscale/libswscale.a" \
+      && ld -r -unexported_symbol _ff_init_half2float_tables -o half2float_hidden.o half2float.o \
+      && rm -f half2float.o && mv half2float_hidden.o half2float.o \
       && libtool -static -o libswscale_nodup.a ./*.o) \
-  || { echo "FAIL: 拆 half2float.o 失败" >&2; exit 1; }
-echo "nodup members: $(cd "$BLD/nodup" && ar t libswscale_nodup.a | tr '\n' ' ')"
+  || { echo "FAIL: half2float 符号隐藏失败" >&2; exit 1; }
 SWSCALE_NODUP="$BLD/nodup/libswscale_nodup.a"
 WHOLE_NODUP="-Wl,-all_load libavformat/libavformat.a libavcodec/libavcodec.a $SWSCALE_NODUP libavfilter/libavfilter.a libswresample/libswresample.a libavdevice/libavdevice.a libavutil/libavutil.a"
 $MAC_CC -dynamiclib -o "$OUT/$LIB" $WHOLE_NODUP $FULL_EXT -lm -lpthread -ldl -lz \

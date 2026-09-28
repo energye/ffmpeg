@@ -12,15 +12,15 @@ mkdir -p "$SRC"
 cd "$SRC"
 
 # 各库版本与 Dockerfile ENV 同源（改一处即可，另一处同步）。
-FT=${FREETYPE_VER:-2.13.2}
-HB=${HARFBUZZ_VER:-8.3.0}
-FB=${FRIBIDI_VER:-1.0.13}
-FC=${FONTCONFIG_VER:-2.15.0}
-ASS=${LIBASS_VER:-0.17.1}
-H264=${OPENH264_VER:-2.4.1}
-OSSL=${OPENSSL_VER:-3.0.16}
-ZL=${ZLIB_VER:-1.3.1}
-EXPAT=${EXPAT_VER:-2.6.4}
+FT=${FREETYPE_VER:-2.14.3}
+HB=${HARFBUZZ_VER:-14.5.0}
+FB=${FRIBIDI_VER:-1.0.17}
+FC=${FONTCONFIG_VER:-2.18.3}
+ASS=${LIBASS_VER:-0.17.5}
+H264=${OPENH264_VER:-2.6.0}
+OSSL=${OPENSSL_VER:-3.5.8}
+ZL=${ZLIB_VER:-1.3.2}
+EXPAT=${EXPAT_VER:-2.8.5}
 
 need() { # file url [fallback-url]
   # 第一优先级：本仓 third_party 预置包（离线可用，CI 不再碰外网）。
@@ -221,7 +221,7 @@ EOF
   rm -rf hb-$TAG && mkdir hb-$TAG && tar -xJf harfbuzz-$HB.tar.xz -C hb-$TAG --strip-components=1
   # 测试/工具/文档二进制不编：交叉下它们链宿主 libz.so（x86_64）直接炸（实测 386/arm64/arm 全挂
   # 在 test-vector 链接上），且我们只要静态库，跳过省时省事。x64 同步关，行为一致。
-  (cd hb-$TAG && CC="$CC" CXX="$CXX" CFLAGS="$MESON_CFLAGS" CXXFLAGS="$MESON_CXXFLAGS" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/zlib-$TAG/lib/pkgconfig meson setup $meson_cross -Dtests=disabled -Dutilities=disabled -Ddocs=disabled -Dicu=disabled --default-library=static --libdir=lib --prefix=$PF/harfbuzz-$TAG build && ninja -C build && ninja -C build install)
+  (cd hb-$TAG && CC="$CC" CXX="$CXX" CFLAGS="$MESON_CFLAGS" CXXFLAGS="$MESON_CXXFLAGS" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/zlib-$TAG/lib/pkgconfig meson setup $meson_cross -Dtests=disabled -Dutilities=disabled -Ddocs=disabled -Dicu=disabled -Dsubset=disabled --default-library=static --libdir=lib --prefix=$PF/harfbuzz-$TAG build && ninja -C build && ninja -C build install)
   # fribidi + fontconfig + libass（静态；fribidi 同样钉 --libdir=lib）。
   rm -rf fb-$TAG && mkdir fb-$TAG && tar -xJf fribidi-$FB.tar.xz -C fb-$TAG --strip-components=1
   (cd fb-$TAG && CC="$CC" CFLAGS="$MESON_CFLAGS" meson setup $meson_cross -Dtests=false -Ddocs=false -Dbin=false --default-library=static --libdir=lib --prefix=$PF/fribidi-$TAG build && ninja -C build && ninja -C build install)
@@ -265,7 +265,7 @@ EOF
   rm -rf h264-$TAG && mkdir h264-$TAG && tar -xzf openh264-$H264.tar.gz -C h264-$TAG --strip-components=1
   case "$TAG" in
     w64|w64arm)
-      (cd h264-$TAG && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No -j"$(nproc)" libopenh264.a && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG install-static-lib && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG openh264-static.pc && mkdir -p $PF/openh264-$TAG/lib/pkgconfig && cp -f openh264-static.pc $PF/openh264-$TAG/lib/pkgconfig/openh264.pc)
+      (cd h264-$TAG && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No -j"$(nproc)" libopenh264.a && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG install-static-lib && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG openh264-static.pc && mkdir -p $PF/openh264-$TAG/lib/pkgconfig && cp -f openh264-static.pc $PF/openh264-$TAG/lib/pkgconfig/openh264.pc && sed -i "s/-lstdc++//g" $PF/openh264-$TAG/lib/pkgconfig/openh264.pc && test -f $PF/openh264-$TAG/lib/pkgconfig/openh264.pc && test -f $PF/openh264-$TAG/lib/libopenh264.a)
       ;;
     *)
       (cd h264-$TAG && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No -j"$(nproc)" && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG install && rm -f $PF/openh264-$TAG/lib/libopenh264.so*)

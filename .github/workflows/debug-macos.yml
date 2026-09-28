@@ -20,9 +20,9 @@ jobs:
   mac-single:
     runs-on: macos-latest
     env:
-      MACOSX_DEPLOYMENT_TARGET: "10.13"
+      MACOSX_DEPLOYMENT_TARGET: "10.15"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Parse target+variant from tag
         run: |

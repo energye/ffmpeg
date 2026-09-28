@@ -14,13 +14,13 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$SRC" "$PF"
 cd "$SRC"
 
-FT=${FREETYPE_VER:-2.13.2}
-HB=${HARFBUZZ_VER:-8.3.0}
-FB=${FRIBIDI_VER:-1.0.13}
-FC=${FONTCONFIG_VER:-2.15.0}
-ASS=${LIBASS_VER:-0.17.1}
-H264=${OPENH264_VER:-2.4.1}
-EXPAT=${EXPAT_VER:-2.6.4}
+FT=${FREETYPE_VER:-2.14.3}
+HB=${HARFBUZZ_VER:-14.5.0}
+FB=${FRIBIDI_VER:-1.0.17}
+FC=${FONTCONFIG_VER:-2.18.3}
+ASS=${LIBASS_VER:-0.17.5}
+H264=${OPENH264_VER:-2.6.0}
+EXPAT=${EXPAT_VER:-2.8.5}
 UB=${LIBUNIBREAK_VER:-8.0}
 
 NCPU=$(sysctl -n hw.ncpu 2>/dev/null || echo 4)

@@ -61,23 +61,28 @@ linux-x64-base → linux-x64-full → linux-arm64-base/full → linux-386-base/f
   或者调 `api.github.com/repos/energye/ffmpeg/actions/runs` 查状态和结论。
 - 完整报错文本需要从网页上复制，或者配一个能读 Actions 的 token 后用接口拉。
 
-## 7. 当前状态（2026-09-28，调试收工，单发布流已接好）
+## 7. 当前状态（2026-09-28，新基座+新依赖已进仓，逐平台重验中）
 
-- 调试流最终绿标签：linux-x64-base-003、linux-x64-full-001、linux-arm64-base/full-001、
-  linux-386-base/full-001、linux-arm-base/full-001、win-x64-base-001、win-x64-full-002、
-  win-arm64-base/full-001、darwin-arm64-base-009、darwin-arm64-full-001、
-  darwin-x64-base-001、darwin-x64-full-033。
-- 调试流 `.github/workflows/debug-mini.yml` 已删除，不再触发任何构建。
+- 旧基座旧依赖的绿标签：linux-x64-base-003、linux-x64-full-001/002、
+  linux-arm64/386/arm-full-002、win-x64-base-001、win-x64-full-002/006、
+  win-arm64-base/full-001、darwin-arm64-base-009、darwin-arm64-full-001/002、
+  darwin-x64-base-001、darwin-x64-full-033/034。
+- 调试流三份（调哪个平台启用哪个）：`debug-linux.yml`、`debug-win.yml`、
+  `debug-macos.yml`，标签规则不变（`debug-mini-<目标>-<版本>-<重试号>`）。
 - 唯一构建入口：`.github/workflows/release.yml`（release published + 手动触发），
   一次编出 8 架构 × 2 版本 = 16 个单文件 + darwin 通用包（base/full 各一），
   随 release 自动上传（publish 口径照 rwgpu cd.yml：分组 job + artifact +
-  softprops/action-gh-release）。
+  softprops/action-gh-release）。runner 全 latest，checkout 统一 v7。
 - 平台分工：linux-* 与 win-*（mingw/llvm-mingw 交叉）在 ubuntu18 容器里编；
   darwin-* 在 macos 原生编，部署目标 10.15。win-full 烧字已与 linux/mac 对齐
   （w64/w64arm 烧字静态链见 `dual/build-deps.sh`，终链与门禁见 `dual/build-one.sh`）。
-- 依赖预置在仓：`third_party/` 存 10 个验证过的源码包（约 100MB），`need()` 本地
-  优先，CI 不再碰外网；升级版本时换包并同步三处版本号（见 §8）。
+- 依赖预置在仓：`third_party/` 存 10 个验证过的源码包（约 100MB）+ Python 3.11 +
+  llvm-mingw 20230320 + 离线 apt/pypi 包（见 README），`need()` 本地优先，
+  CI 不再碰外网；升级版本时换包并同步三处版本号（Dockerfile ENV、
+  build-deps 默认值、`third_party` 包，mac 脚本的 brew 行另算）。
 - `mini/` 最小版和旧发版逻辑已由 `dual/` 取代，到时再定去留。
+- 待办（§8 实施中）：ubuntu18 基座 + 新依赖上 CI 后，按 §4 顺序逐平台打标签
+  验证（linux-x64-full 先行），三平台 16 个全绿再合入 `release.yml` 收尾。
 
 ## 8. 新需求（构建基座与依赖升级，用户已确认，一起上）
 

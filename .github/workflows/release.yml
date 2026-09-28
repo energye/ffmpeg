@@ -17,20 +17,20 @@ on:
   workflow_dispatch:
 
 env:
-  FREETYPE_VER: 2.13.2
-  HARFBUZZ_VER: 8.3.0
-  FRIBIDI_VER: 1.0.13
-  FONTCONFIG_VER: 2.15.0
-  LIBASS_VER: 0.17.1
-  OPENH264_VER: 2.4.1
-  OPENSSL_VER: 3.0.16
-  ZLIB_VER: 1.3.1
-  EXPAT_VER: 2.6.4
+  FREETYPE_VER: 2.14.3
+  HARFBUZZ_VER: 14.5.0
+  FRIBIDI_VER: 1.0.17
+  FONTCONFIG_VER: 2.18.3
+  LIBASS_VER: 0.17.5
+  OPENH264_VER: 2.6.0
+  OPENSSL_VER: 3.5.8
+  ZLIB_VER: 1.3.2
+  EXPAT_VER: 2.8.5
 
 jobs:
   linux-win:
     name: ${{ matrix.name }} (base+full)
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -46,7 +46,7 @@ jobs:
       DEPARCH: ${{ matrix.deparch }}
       LIBEXT: ${{ matrix.ext }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v5
         with:
@@ -130,11 +130,11 @@ jobs:
           - {tag: darwin-x64, arch: x64}
           - {tag: darwin-arm64, arch: arm64}
     env:
-      MACOSX_DEPLOYMENT_TARGET: "10.13"
+      MACOSX_DEPLOYMENT_TARGET: "10.15"
       TARGET: ${{ matrix.tag }}
       ARCH: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v5
         with:
@@ -212,7 +212,7 @@ jobs:
   publish:
     needs: [linux-win, mac, mac-universal]
     if: github.event_name == 'release'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:

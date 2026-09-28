@@ -98,13 +98,8 @@ build_one_arch() { # arch-tag cc cxx
     esac
     (cd ossl-$TAG && perl ./Configure --prefix=$PF/ossl-$TAG no-shared -fPIC no-tests $OSSL_TGT $OSSL_PFX && make -j"$(nproc)" CC="$OSSL_MAKE_CC" AR="${OSSL_PFX#--cross-compile-prefix=}ar" RANLIB="${OSSL_PFX#--cross-compile-prefix=}ranlib" && make install_sw)
   fi
-  # w64/w64arm（Windows 烧字静态链：freetype+harfbuzz+fribidi+fontconfig+
-  # libass 全用 mingw/llvm-mingw 源码编静态，win-full 与 linux/mac 对齐，
-  # 不再是“只写盒”。openssl 走系统 schannel，不编。
-  case "$TAG" in
-    w64|w64arm) : ;;
-    *) echo "deps $TAG done (zlib only)"; return 0 ;;
-  esac
+  # 全架构统一走完整静态链（含 w64/w64arm 的 Windows 烧字链，
+  # 与 linux/mac 对齐；openssl 只在 linux 编，win 走系统 schannel）。
   # freetype（静态，harfbuzz 关，免循环依赖）。
   # 交叉要递 --host（autoconf 不认 CC 前缀，得明说目标三元组，否则它拿
   # 交叉编的 apinames 去本机跑，直接 Error 77）。
@@ -115,7 +110,13 @@ build_one_arch() { # arch-tag cc cxx
     w64arm) FT_HOST="--host=aarch64-w64-mingw32" ;;
   esac
   rm -rf ft-$TAG && mkdir ft-$TAG && tar -xzf freetype-$FT.tar.gz -C ft-$TAG --strip-components=1
-  (cd ft-$TAG && CC="$CC" CFLAGS="-fPIC" ./configure $FT_HOST --disable-shared --enable-static --without-harfbuzz --without-bzip2 --without-png --prefix=$PF/freetype-$TAG && make -j"$(nproc)" && make install)
+  # mingw 下没有系统 zlib 头，freetype 的 gzip 模块要指到自建 zlib-$TAG
+  # （linux 靠镜像里 zlib1g-dev 顶着，不用加）。
+  case "$TAG" in
+    w64|w64arm) FT_EXTRA_CFLAGS="-I$PF/zlib-$TAG/include"; FT_EXTRA_LDFLAGS="-L$PF/zlib-$TAG/lib" ;;
+    *) FT_EXTRA_CFLAGS=""; FT_EXTRA_LDFLAGS="" ;;
+  esac
+  (cd ft-$TAG && CC="$CC" CFLAGS="-fPIC $FT_EXTRA_CFLAGS" LDFLAGS="$FT_EXTRA_LDFLAGS" ./configure $FT_HOST --disable-shared --enable-static --without-harfbuzz --without-bzip2 --without-png --prefix=$PF/freetype-$TAG && make -j"$(nproc)" && make install)
   # expat（静态，fontconfig 的 XML 解析依赖，MIT 许可；交叉递 --host 同上）。
   rm -rf ex-$TAG && mkdir ex-$TAG && tar -xzf expat-$EXPAT.tar.gz -C ex-$TAG --strip-components=1
   (cd ex-$TAG && CC="$CC" CFLAGS="-fPIC" ./configure $FT_HOST --disable-shared --enable-static --without-examples --without-tests --without-docbook --prefix=$PF/expat-$TAG && make -j"$(nproc)" && make install)
@@ -210,18 +211,18 @@ EOF
   rm -rf hb-$TAG && mkdir hb-$TAG && tar -xJf harfbuzz-$HB.tar.xz -C hb-$TAG --strip-components=1
   # 测试/工具/文档二进制不编：交叉下它们链宿主 libz.so（x86_64）直接炸（实测 386/arm64/arm 全挂
   # 在 test-vector 链接上），且我们只要静态库，跳过省时省事。x64 同步关，行为一致。
-  (cd hb-$TAG && CC="$CC" CXX="$CXX" CFLAGS="$MESON_CFLAGS" CXXFLAGS="$MESON_CXXFLAGS" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig meson setup $meson_cross -Dtests=disabled -Dutilities=disabled -Ddocs=disabled --default-library=static --libdir=lib --prefix=$PF/harfbuzz-$TAG build && ninja -C build && ninja -C build install)
+  (cd hb-$TAG && CC="$CC" CXX="$CXX" CFLAGS="$MESON_CFLAGS" CXXFLAGS="$MESON_CXXFLAGS" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/zlib-$TAG/lib/pkgconfig meson setup $meson_cross -Dtests=disabled -Dutilities=disabled -Ddocs=disabled --default-library=static --libdir=lib --prefix=$PF/harfbuzz-$TAG build && ninja -C build && ninja -C build install)
   # fribidi + fontconfig + libass（静态；fribidi 同样钉 --libdir=lib）。
   rm -rf fb-$TAG && mkdir fb-$TAG && tar -xJf fribidi-$FB.tar.xz -C fb-$TAG --strip-components=1
   (cd fb-$TAG && CC="$CC" CFLAGS="$MESON_CFLAGS" meson setup $meson_cross -Dtests=false -Ddocs=false -Dbin=false --default-library=static --libdir=lib --prefix=$PF/fribidi-$TAG build && ninja -C build && ninja -C build install)
   rm -rf fc-$TAG && mkdir fc-$TAG && tar -xzf fontconfig-$FC.tar.gz -C fc-$TAG --strip-components=1
   # LDFLAGS 指到自建 zlib-$TAG：fc-cache 等工具二进制要链 -lz，交叉目标（386/arm64/arm）
   # 在宿主 /usr/lib 下只有 x86_64 的 libz 会炸（实测 386 挂在 fc-cache 链接上），库本身不欠账。
-  (cd fc-$TAG && CC="$CC" CFLAGS="-fPIC" LDFLAGS="-L$PF/zlib-$TAG/lib" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig ./configure $FT_HOST --disable-shared --enable-static --disable-docs --disable-libxml2 --with-expat=$PF/expat-$TAG --prefix=$PF/fontconfig-$TAG && make -j"$(nproc)" && make install)
+  (cd fc-$TAG && CC="$CC" CFLAGS="-fPIC" LDFLAGS="-L$PF/zlib-$TAG/lib" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig:$PF/zlib-$TAG/lib/pkgconfig ./configure $FT_HOST --disable-shared --enable-static --disable-docs --disable-libxml2 --with-expat=$PF/expat-$TAG --prefix=$PF/fontconfig-$TAG && make -j"$(nproc)" && make install)
   rm -rf as-$TAG && mkdir as-$TAG && tar -xzf libass-$ASS.tar.gz -C as-$TAG --strip-components=1
   # fontconfig 开着（系统字体查找要它；静态 .a 上一步已备好，不欠动态账）。
   # 交叉同样递 --host（libass 的 configure 也要明说）。
-  (cd as-$TAG && CC="$CC" CFLAGS="-fPIC" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/harfbuzz-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/fontconfig-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig ./configure $FT_HOST --disable-shared --enable-static --prefix=$PF/ass-$TAG && make -j"$(nproc)" && make install)
+  (cd as-$TAG && CC="$CC" CFLAGS="-fPIC" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/harfbuzz-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/fontconfig-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig:$PF/zlib-$TAG/lib/pkgconfig ./configure $FT_HOST --disable-shared --enable-static --prefix=$PF/ass-$TAG && make -j"$(nproc)" && make install)
   # openh264（静态；install 会顺带装 .so，删掉只留 .a，免得后人误链动态）。
   # 注意：install 也要带同一套 CC/CXX/ARCH/USE_ASM——它的依赖会触发二次构建，
   # 不带就是本机默认（64 位+开汇编），会把刚编好的 32 位 .o 混成 64 位再链，

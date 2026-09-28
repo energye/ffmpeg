@@ -1,0 +1,87 @@
+name: debug-macos
+
+# macOS 单目标调试入口：macos 原生编（x64 在 arm64 机器上交叉，
+# 静态链见 dual/build-deps-mac.sh），只在 Actions 上调，不在本地调。
+# 打标签触发，一次只编一个目标的一个版本，尾巴数字是重试计数：
+#   debug-mini-darwin-x64-base-001 / debug-mini-darwin-x64-full-001
+#   debug-mini-darwin-arm64-base-001 / debug-mini-darwin-arm64-full-001
+# 同名标签推不上去，重试必须把尾巴数字加一。
+# 开关：调 mac 时启用本文件，调别的平台时用
+#   gh workflow disable debug-macos.yml 把本文件停掉（反之启用）。
+# 调通后合入 build-mini.yml 统一发版（本文件的步骤与发版流 mac 侧
+# 同源，合入时直接搬）。
+
+on:
+  push:
+    tags:
+      - 'debug-mini-darwin-*'
+
+jobs:
+  mac-single:
+    runs-on: macos-latest
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "10.13"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse target+variant from tag
+        run: |
+          REF="${GITHUB_REF_NAME}"
+          BASE="${REF#debug-mini-}"
+          PAIR="$(echo "$BASE" | sed -E 's/-[0-9]+$//')"
+          VARIANT="$(echo "$PAIR" | sed -E 's/.*-(base|full)$/\1/')"
+          TARGET="$(echo "$PAIR" | sed -E 's/-(base|full)$//')"
+          echo "tag=$REF target=$TARGET variant=$VARIANT"
+          case "$TARGET" in
+            darwin-x64) echo "ARCH=x64" >> "$GITHUB_ENV" ;;
+            darwin-arm64) echo "ARCH=arm64" >> "$GITHUB_ENV" ;;
+            *) echo "unknown target $TARGET" >&2; exit 2 ;;
+          esac
+          case "$VARIANT" in
+            base|full) ;;
+            *) echo "unknown variant $VARIANT (want base|full)" >&2; exit 2 ;;
+          esac
+          echo "TARGET=$TARGET" >> "$GITHUB_ENV"
+          echo "VARIANT=$VARIANT" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: 装工具链（含 full 烧字件）
+        run: brew install nasm pkg-config meson ninja gperf freetype harfbuzz fontconfig fribidi libass openh264 || true
+
+      - name: 编 mac 外库静态 .a（仅 x64 full：brew 无 x86_64 瓶，源码编静态链）
+        if: env.ARCH == 'x64' && env.VARIANT == 'full'
+        run: sh dual/build-deps-mac.sh x64
+
+      - name: 取配方并编单文件
+        run: |
+          cd dual && go run ./recipe -variant "$VARIANT" > /tmp/recipe.flags
+          cd "$GITHUB_WORKSPACE"
+          SRC="$PWD" OUTDIR="$PWD/out" sh dual/build-one-mac.sh "$ARCH" "$VARIANT"
+
+      - name: 校验落盘
+        run: |
+          case "$VARIANT" in
+            full) pat="*full*.dylib" ;; *) pat="libgpui_ffmpeg.dylib" ;;
+          esac
+          f=$(find "out/$TARGET" -maxdepth 1 -name "$pat" | head -1)
+          test -n "$f" || { echo "FAIL: 产物没落盘"; exit 1; }
+          ls -la "$f"
+
+      - name: 许可门禁（禁 GPL/nonfree 字样）
+        run: |
+          f=$(find "out/$TARGET" -maxdepth 1 -type f | head -1)
+          echo "checking $f"
+          echo "--- matched GPL/nonfree strings (empty means clean) ---"
+          strings "$f" | grep -iE "libx264|libx265|libfdk_aac" | sort -u | head -20 || true
+          echo "--- end of matches ---"
+          if strings "$f" | grep -iqE "libx264|libx265|libfdk_aac"; then
+            echo "GPL/nonfree 库混入，拒绝入库"; exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.ref_name }}
+          path: out/*

@@ -115,12 +115,12 @@ EOF
   # （harfbuzz VarCompositeGlyph.hh 用了它，_GNU_SOURCE 也救不回来），
   # 直接把调用接到 __sincosf 上（签名一致），否则编到 hb-ot-font 就挂。
   rm -rf hb-$TAG && mkdir hb-$TAG && tar -xJf harfbuzz-$HB.tar.xz -C hb-$TAG --strip-components=1
-  (cd hb-$TAG && PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig meson setup --cross-file /tmp/meson-mac-$TAG.ini -Dtests=disabled -Dutilities=disabled -Ddocs=disabled -Dglib=disabled -Dgobject=disabled -Dcairo=disabled -Dchafa=disabled -Dicu=disabled -Dcpp_args="-Dsincosf=__sincosf" -Dc_args="-arch $OARCH" -Dcpp_link_args="-arch $OARCH" -Dc_link_args="-arch $OARCH" --default-library=static --libdir=lib --prefix=$PF/harfbuzz-$TAG build && ninja -C build && ninja -C build install)
+  (cd hb-$TAG && PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig meson setup --cross-file /tmp/meson-mac-$TAG.ini -Dtests=disabled -Dutilities=disabled -Ddocs=disabled -Dglib=disabled -Dgobject=disabled -Dcairo=disabled -Dchafa=disabled -Dicu=disabled '-Dcpp_args=-Dsincosf=__sincosf -arch x86_64' '-Dc_args=-arch x86_64' '-Dcpp_link_args=-arch x86_64' '-Dc_link_args=-arch x86_64' --default-library=static --libdir=lib --prefix=$PF/harfbuzz-$TAG build && ninja -C build && ninja -C build install)
   check_arch $PF/harfbuzz-$TAG/lib/libharfbuzz.a $OARCH
 
   # fribidi（静态）。
   rm -rf fb-$TAG && mkdir fb-$TAG && tar -xJf fribidi-$FB.tar.xz -C fb-$TAG --strip-components=1
-  (cd fb-$TAG && meson setup --cross-file /tmp/meson-mac-$TAG.ini -Dtests=false -Ddocs=false -Dbin=false -Dc_args="-arch $OARCH" -Dcpp_args="-arch $OARCH" -Dc_link_args="-arch $OARCH" -Dcpp_link_args="-arch $OARCH" --default-library=static --libdir=lib --prefix=$PF/fribidi-$TAG build && ninja -C build && ninja -C build install)
+  (cd fb-$TAG && meson setup --cross-file /tmp/meson-mac-$TAG.ini -Dtests=false -Ddocs=false -Dbin=false '-Dc_args=-arch x86_64' '-Dcpp_args=-arch x86_64' '-Dc_link_args=-arch x86_64' '-Dcpp_link_args=-arch x86_64' --default-library=static --libdir=lib --prefix=$PF/fribidi-$TAG build && ninja -C build && ninja -C build install)
   check_arch $PF/fribidi-$TAG/lib/libfribidi.a $OARCH
 
   # fontconfig（静态，指自建三件；libxml2 关，文档关）。

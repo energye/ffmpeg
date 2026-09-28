@@ -130,7 +130,7 @@ EOF
   # 不进 test 目录：test-conf 链 brew 的 arm64 json-c 必挂，且顶层 make
   # 会连带编它；src 子目录目标在源码树内编，别名头需先在顶层 make 生成）。
   rm -rf fc-$TAG && mkdir fc-$TAG && tar -xzf fontconfig-$FC.tar.gz -C fc-$TAG --strip-components=1
-  (cd fc-$TAG && PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig ./configure $HOST --disable-shared --enable-static --disable-docs --disable-libxml2 --with-expat=$PF/expat-$TAG --prefix=$PF/fontconfig-$TAG && make -C src fcalias.h fcaliastail.h fcftalias.h fcftaliastail.h fcobjshash.h && make -C src libfontconfig.la && make -C src install && make -C fontconfig install && mkdir -p $PF/fontconfig-$TAG/lib/pkgconfig && cp -f fontconfig.pc $PF/fontconfig-$TAG/lib/pkgconfig/)
+  (cd fc-$TAG && PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig ./configure $HOST --disable-shared --enable-static --disable-docs --disable-libxml2 --with-expat=$PF/expat-$TAG --prefix=$PF/fontconfig-$TAG && make -C src fcalias.h fcaliastail.h fcftalias.h fcftaliastail.h fcobjshash.h && make -C src libfontconfig.la && make -C src install && make -C fontconfig install && mkdir -p $PF/fontconfig-$TAG/lib/pkgconfig && cp -f fontconfig.pc $PF/fontconfig-$TAG/lib/pkgconfig/ && EXPLIB=$(PKG_CONFIG_PATH=$PF/expat-$TAG/lib/pkgconfig pkg-config --libs expat 2>/dev/null || echo "-L$PF/expat-$TAG/lib -lexpat") && sed -i '' "s|^Libs: \(.*\)$|Libs: \1 $EXPLIB|" $PF/fontconfig-$TAG/lib/pkgconfig/fontconfig.pc)
   check_arch $PF/fontconfig-$TAG/lib/libfontconfig.a $OARCH
 
   # libunibreak（静态，libass 的断行依赖；brew 只有 arm64 瓶，

@@ -234,5 +234,5 @@ jobs:
             gpui 单文件 FFmpeg（7.1 同一棵树，许可 LGPL 宽松）。
             基础版 libgpui_ffmpeg.* 只管看（解码+分流+滤镜）；
             高级版 libgpui_ffmpeg_full.* 加写文件（复用+原生编码+烧字）。
-            Linux 在 ubuntu18 容器里编（老系统兼容）；mac 最低支持 10.13；
+            Linux 在 ubuntu18 容器里编（老系统兼容）；mac 最低支持 10.15；
             Windows 用 mingw（x64）与 llvm-mingw（arm64）交叉编。

@@ -27,7 +27,20 @@ else
   COMMON=$(cd "$REPO/dual" && go run ./recipe -variant "$V")
 fi
 
+# mac 编 x64 是交叉（-arch x86_64 皮），configure 的 pkg-config 检测
+# 跑的是 x86_64 二进制，brew 的 arm64 .pc 缺 x86_64 段就报找不到。
+# 先把 PKG_CONFIG_PATH 指到 brew 前缀，找不到就走下面的容错丢开关。
+if [ -d /opt/homebrew/lib/pkgconfig ]; then
+  export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+fi
+if [ -d /usr/local/lib/pkgconfig ]; then
+  export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+fi
+if [ -d /opt/homebrew/opt/openh264/lib/pkgconfig ]; then
+  export PKG_CONFIG_PATH="/opt/homebrew/opt/openh264/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+fi
 # full 缺料容错（同 build-one.sh）：pkg-config 找不到就丢开关+连带滤镜。
+echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
 FULL_DEPS_MAC=""
 FULL_DROP=""
 if [ "$V" = "full" ]; then
@@ -35,8 +48,10 @@ if [ "$V" = "full" ]; then
   for pair in $want_pc; do
     lib="${pair%%:*}"; pc="${pair##*:}"
     if pkg-config --exists "$pc" 2>/dev/null; then
+      echo "FOUND pc $pc: $(pkg-config --modversion "$pc" 2>/dev/null)"
       FULL_DEPS_MAC="$FULL_DEPS_MAC --enable-$lib"
     else
+      echo "MISS pc $pc" >&2
       echo "WARN: 缺外库 $pc，丢掉 --enable-$lib（本次 mac full 无此功能）" >&2
       FULL_DROP="$FULL_DROP --enable-$lib"
     fi

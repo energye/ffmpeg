@@ -195,6 +195,12 @@ CFG="$CFG --pkg-config-flags=--static"
 # 日志里 WARNING: aarch64-linux-gnu-pkg-config not found）。
 # 显式钉回系统 pkg-config，搜索路径走上面的 PKG_CONFIG_LIBDIR（全是目标架构的 .pc）。
 CFG="$CFG --pkg-config=pkg-config"
+# 动 configure 前先报料：各外库 .pc 版本与 Libs，一眼看出谁缺谁错。
+echo "=== pkg-config diag ==="
+for pc in freetype2 harfbuzz harfbuzz-subset fontconfig fribidi libass openh264; do
+  echo "--- $pc: ver=[$(pkg-config --modversion "$pc" 2>&1 || true)] libs=[$(pkg-config --static --libs "$pc" 2>&1 || true)]"
+done
+trap 'rc=$?; if [ $rc -ne 0 ]; then echo "=== config.log require lines ==="; grep -a "require_pkg_config\|^ERROR" ffbuild/config.log 2>/dev/null | tail -8 || true; echo "=== config.log tail ==="; tail -c 6000 ffbuild/config.log 2>/dev/null || true; fi' EXIT
 # shellcheck disable=SC2086
 /src/configure $CFG
 make -j"$(nproc)"

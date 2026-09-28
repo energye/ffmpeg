@@ -220,7 +220,7 @@ EOF
   rm -rf hb-$TAG && mkdir hb-$TAG && tar -xJf harfbuzz-$HB.tar.xz -C hb-$TAG --strip-components=1
   # 测试/工具/文档二进制不编：交叉下它们链宿主 libz.so（x86_64）直接炸（实测 386/arm64/arm 全挂
   # 在 test-vector 链接上），且我们只要静态库，跳过省时省事。x64 同步关，行为一致。
-  (cd hb-$TAG && CC="$CC" CXX="$CXX" CFLAGS="$MESON_CFLAGS" CXXFLAGS="$MESON_CXXFLAGS" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/zlib-$TAG/lib/pkgconfig meson setup $meson_cross -Dtests=disabled -Dutilities=disabled -Ddocs=disabled -Dicu=disabled -Dsubset=disabled --default-library=static --libdir=lib --prefix=$PF/harfbuzz-$TAG build && ninja -C build && ninja -C build install)
+  (cd hb-$TAG && CC="$CC" CXX="$CXX" CFLAGS="$MESON_CFLAGS" CXXFLAGS="$MESON_CXXFLAGS" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/zlib-$TAG/lib/pkgconfig meson setup $meson_cross -Dtests=disabled -Dutilities=disabled -Ddocs=disabled -Dicu=disabled -Dsubset=disabled -Dglib=disabled -Dgobject=disabled --default-library=static --libdir=lib --prefix=$PF/harfbuzz-$TAG build && ninja -C build && ninja -C build install)
   # fribidi + fontconfig + libass（静态；fribidi 同样钉 --libdir=lib）。
   rm -rf fb-$TAG && mkdir fb-$TAG && tar -xJf fribidi-$FB.tar.xz -C fb-$TAG --strip-components=1
   (cd fb-$TAG && CC="$CC" CFLAGS="$MESON_CFLAGS" meson setup $meson_cross -Dtests=false -Ddocs=false -Dbin=false --default-library=static --libdir=lib --prefix=$PF/fribidi-$TAG build && ninja -C build && ninja -C build install)

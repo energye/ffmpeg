@@ -254,20 +254,48 @@ EOF
   # fontconfig 开着（系统字体查找要它；静态 .a 上一步已备好，不欠动态账）。
   # 交叉同样递 --host（libass 的 configure 也要明说）。
   (cd as-$TAG && CC="$CC" CFLAGS="-fPIC" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/harfbuzz-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/fontconfig-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig:$PF/zlib-$TAG/lib/pkgconfig ./configure $FT_HOST --disable-shared --enable-static --prefix=$PF/ass-$TAG && make -j"$(nproc)" && make install)
-  # openh264（静态；install 会顺带装 .so，删掉只留 .a，免得后人误链动态）。
-  # 注意：install 也要带同一套 CC/CXX/ARCH/USE_ASM——它的依赖会触发二次构建，
-  # 不带就是本机默认（64 位+开汇编），会把刚编好的 32 位 .o 混成 64 位再链，
-  # 直接炸（实测 386 挂在 libopenh264.so.2.4.1 的 -m64 重链上）。
-  # Windows（w64/w64arm）：宿主 uname 是 linux，openh264 按 linux 规则
-  # 拼动态库链接（-soname，走 lld 不认，直接炸），其实我们只要静态 .a。
-  # 先只编静态库装上（install-static-lib+头+静态版 .pc），跳过动态那半。
+  # openh264 2.6.0 的两个坑（实测）：
+  # 1) 动态库链接走宿主 uname 规则（w64 在 linux 容器里拼 -soname，
+  #    lld 不认直接炸）——w64/w64arm 只编装静态 .a + 头 + 静态版 .pc。
+  # 2) 2.6.0 删了版本探针 WelsGetCodecVersion 的实现（头有声明，
+  #    welsEncoderExt.cpp 里只剩 WelsCreateSVCEncoder；2.4.1 时还有），
+  #    FFmpeg configure 原生查旧探针必挂。这里补一个同名小对象进 .a，
+  #    返回真实版本 {2,6,0}（libopenh264enc.c 实际只用 WelsCreateSVCEncoder，
+  #    探针过了之后终链用不到它；mac/linux 同 .a 同样处理）。
   rm -rf h264-$TAG && mkdir h264-$TAG && tar -xzf openh264-$H264.tar.gz -C h264-$TAG --strip-components=1
+  OHAARCH=$(arch_map "$TAG")
+  OHVER_MAJ=$(echo "$H264" | cut -d. -f1); OHVER_MIN=$(echo "$H264" | cut -d. -f2); OHVER_PAT=$(echo "$H264" | cut -d. -f3)
+  cat > h264-$TAG/ohver-shim.c <<EOF
+#include <wels/codec_api.h>
+OpenH264Version WelsGetCodecVersion(void) {
+  OpenH264Version v = {$OHVER_MAJ, $OHVER_MIN, $OHVER_PAT, 0};
+  return v;
+}
+EOF
+  OHSHIM_OBJ=""
+  case "$TAG" in
+    w64|w64arm|arm64|arm|386)
+      (cd h264-$TAG && $CC -c -fPIC -Icodec/api ohver-shim.c -o ohver-shim.o) && OHSHIM_OBJ="h264-$TAG/ohver-shim.o" || echo "WARN: 版本探针垫片没编上（$TAG），configure 旧探针可能挂" >&2
+      ;;
+  esac
+  OHAAR=""
+  case "$TAG" in
+    x64) OHAAR="ar" ;; arm64) OHAAR="aarch64-linux-gnu-ar" ;;
+    386) OHAAR="i686-linux-gnu-ar" ;; arm) OHAAR="arm-linux-gnueabihf-ar" ;;
+    w64) OHAAR="x86_64-w64-mingw32-ar" ;; w64arm) OHAAR="aarch64-w64-mingw32-ar" ;;
+  esac
   case "$TAG" in
     w64|w64arm)
-      (cd h264-$TAG && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No -j"$(nproc)" libopenh264.a && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG install-static-lib && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG openh264-static.pc && mkdir -p $PF/openh264-$TAG/lib/pkgconfig && cp -f openh264-static.pc $PF/openh264-$TAG/lib/pkgconfig/openh264.pc && OHSTDCXX="" && case "$TAG" in w64) OHSTDCXX="-lstdc++" ;; w64arm) OHSTDCXX="-lc++" ;; esac && sed -i "s|-lstdc++|$OHSTDCXX|g" $PF/openh264-$TAG/lib/pkgconfig/openh264.pc && sed -i "s|^Libs: \(.*\)$|Libs: \1 $OHSTDCXX|" $PF/openh264-$TAG/lib/pkgconfig/openh264.pc && test -f $PF/openh264-$TAG/lib/pkgconfig/openh264.pc && test -f $PF/openh264-$TAG/lib/libopenh264.a)
+      (cd h264-$TAG && make CC="$CC" CXX="$CXX" ARCH=$OHAARCH USE_ASM=No -j"$(nproc)" libopenh264.a && make CC="$CC" CXX="$CXX" ARCH=$OHAARCH USE_ASM=No PREFIX=$PF/openh264-$TAG install-static-lib && make CC="$CC" CXX="$CXX" ARCH=$OHAARCH USE_ASM=No PREFIX=$PF/openh264-$TAG openh264-static.pc && mkdir -p $PF/openh264-$TAG/lib/pkgconfig && cp -f openh264-static.pc $PF/openh264-$TAG/lib/pkgconfig/openh264.pc && OHSTDCXX="" && case "$TAG" in w64) OHSTDCXX="-lstdc++" ;; w64arm) OHSTDCXX="-lc++" ;; esac && sed -i "s|-lstdc++|$OHSTDCXX|g" $PF/openh264-$TAG/lib/pkgconfig/openh264.pc && sed -i "s|^Libs: \(.*\)$|Libs: \1 $OHSTDCXX|" $PF/openh264-$TAG/lib/pkgconfig/openh264.pc && test -f $PF/openh264-$TAG/lib/pkgconfig/openh264.pc && test -f $PF/openh264-$TAG/lib/libopenh264.a)
+      if [ -n "$OHSHIM_OBJ" ] && [ -f "$OHSHIM_OBJ" ]; then
+        $OHAAR r "$PF/openh264-$TAG/lib/libopenh264.a" "$OHSHIM_OBJ" && echo "openh264 版本探针垫片已并入 $TAG 的 .a" >&2 || { echo "FAIL: 垫片并入 $TAG 的 .a 失败" >&2; exit 1; }
+      fi
       ;;
     *)
-      (cd h264-$TAG && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No -j"$(nproc)" && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG install && rm -f $PF/openh264-$TAG/lib/libopenh264.so*)
+      (cd h264-$TAG && make CC="$CC" CXX="$CXX" ARCH=$OHAARCH USE_ASM=No -j"$(nproc)" && make CC="$CC" CXX="$CXX" ARCH=$OHAARCH USE_ASM=No PREFIX=$PF/openh264-$TAG install && rm -f $PF/openh264-$TAG/lib/libopenh264.so*)
+      if [ -n "$OHSHIM_OBJ" ] && [ -f "$OHSHIM_OBJ" ]; then
+        "$OHAAR" r "$PF/openh264-$TAG/lib/libopenh264.a" "$OHSHIM_OBJ" && echo "openh264 版本探针垫片已并入 $TAG 的 .a" >&2 || { echo "FAIL: 垫片并入 $TAG 的 .a 失败" >&2; exit 1; }
+      fi
       ;;
   esac
 }

@@ -169,12 +169,20 @@ EOF
   check_arch $PF/ass-$TAG/lib/libass.a $OARCH
 
   # openh264（静态；install 顺带装 dylib，删掉只留 .a，免误链动态）。
-  # 注意：install 装的是动态版 .pc（Libs 只有 -lopenh264，C++ 运行库藏在
-  # Libs.private 的 -lstdc++ 里，mac 上还没有这个库）；纯静态试链和终链都
-  # 要 C++ 运行库，直接把 Libs 补上 -lc++（mac 的 C++ 标准库），private 里
-  # 的 -lstdc++ 改名，否则 configure 报 openh264 找不到。
+  # openh264 2.6.0 的坑见 build-deps.sh 同名注释：版本探针实现被删，
+  # FFmpeg configure 原生查旧探针必挂。这里同样补同名小对象进 .a，
+  # 返回真实版本（mac 终链手拼 .a，用不到它，只过 configure）。
   rm -rf h264-$TAG && mkdir h264-$TAG && tar -xzf openh264-$H264.tar.gz -C h264-$TAG --strip-components=1
+  OHVER_MAJ=$(echo "$H264" | cut -d. -f1); OHVER_MIN=$(echo "$H264" | cut -d. -f2); OHVER_PAT=$(echo "$H264" | cut -d. -f3)
+  cat > h264-$TAG/ohver-shim.c <<EOF
+#include <wels/codec_api.h>
+OpenH264Version WelsGetCodecVersion(void) {
+  OpenH264Version v = {$OHVER_MAJ, $OHVER_MIN, $OHVER_PAT, 0};
+  return v;
+}
+EOF
   (cd h264-$TAG && make CC="clang $ARCHC" CXX="clang++ $ARCHC" ARCH=$(arch_map "$TAG") USE_ASM=No -j"$NCPU" && make CC="clang $ARCHC" CXX="clang++ $ARCHC" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG install && rm -f $PF/openh264-$TAG/lib/libopenh264.*.dylib $PF/openh264-$TAG/lib/libopenh264.dylib)
+  (cd h264-$TAG && clang $ARCHC -c -fPIC -Icodec/api ohver-shim.c -o ohver-shim.o && ar r $PF/openh264-$TAG/lib/libopenh264.a ohver-shim.o && echo "openh264 版本探针垫片已并入 mac-$TAG 的 .a" >&2) || { echo "FAIL: mac-$TAG 垫片失败" >&2; exit 1; }
   OHPC=$PF/openh264-$TAG/lib/pkgconfig/openh264.pc
   if [ -f "$OHPC" ]; then
     sed -i '' 's/-lstdc++/-lc++/g' "$OHPC" && sed -i '' 's|^Libs: \(.*\)$|Libs: \1 -lc++|' "$OHPC"

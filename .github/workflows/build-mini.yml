@@ -1,151 +1,210 @@
-name: mini-decode-lib
+name: gpui-ffmpeg-release
 
-# 发版时一次编出全平台解码单文件（gpui video用）。
-# 功能清单见 mini/build-one.sh：视频/音频/图片/字幕解码约30种，
-# 分流约20种（+DASH只在x64 Linux），本地+网络协议，画面/音频滤镜
-# （构图/帧管理/调色/老片修复/防抖/音量混音），截图编码，硬解按平台
-# 开（x64 Linux vaapi，Windows d3d11va，mac videotoolbox），
-# 许可保持LGPL宽松。N卡nvdec后续备好头文件再加。
+# 唯一构建入口：一次编出 8 架构 × 2 版本 = 16 个单文件 + darwin 通用包
+# （base/full 各一），随 release 自动上传。调试流（debug-mini.yml）已删除。
+#
+# 平台分工（照 rwgpu cd.yml 按系统分组）：
+#   linux-* 与 win-*（mingw / llvm-mingw 交叉）在 ubuntu-22.04 的
+#   ubuntu18 兼容容器里编（老 glibc 兼容）；
+#   darwin-* 在 macos 原生编（x64 在 arm64 机器上交叉，静态链见
+#   dual/build-deps-mac.sh）。
+# 配方唯一真源：dual/recipe（Go 命令），两档都不碰 GPL（x264/x265/fdk
+# 一个不开），许可保持 LGPL 2.1。
+
 on:
   release:
     types: [published]
   workflow_dispatch:
 
+env:
+  FREETYPE_VER: 2.13.2
+  HARFBUZZ_VER: 8.3.0
+  FRIBIDI_VER: 1.0.13
+  FONTCONFIG_VER: 2.15.0
+  LIBASS_VER: 0.17.1
+  OPENH264_VER: 2.4.1
+  OPENSSL_VER: 3.0.16
+  ZLIB_VER: 1.3.1
+  EXPAT_VER: 2.6.4
+
 jobs:
   linux-win:
+    name: ${{ matrix.name }} (base+full)
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: linux-x64, deparch: x64, ext: so}
+          - {name: linux-arm64, deparch: arm64, ext: so}
+          - {name: linux-386, deparch: 386, ext: so}
+          - {name: linux-arm, deparch: arm, ext: so}
+          - {name: win-x64, deparch: w64, ext: dll}
+          - {name: win-arm64, deparch: w64arm, ext: dll}
+    env:
+      TARGET: ${{ matrix.name }}
+      DEPARCH: ${{ matrix.deparch }}
+      LIBEXT: ${{ matrix.ext }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
-      - name: Fetch openssl+zlib sources (static link, 不欠动态账)
-        run: |
-          curl -sSL -o mini/openssl-3.0.16.tar.gz \
-            "https://www.openssl.org/source/openssl-3.0.16.tar.gz"
-          curl -sSL -o mini/zlib-1.3.1.tar.gz \
-            "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz"
-          ls -la mini/openssl-3.0.16.tar.gz mini/zlib-1.3.1.tar.gz
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
 
-      - name: Build toolchain images (ubuntu18, 老glibc兼容)
-        run: |
-          docker build -f mini/Dockerfile -t ffbuild-mini .
-          docker build -f mini/Dockerfile-32 -t ffbuild-mini-32 .
-          docker build -f mini/Dockerfile-arm -t ffbuild-mini-arm .
-          docker build -f mini/Dockerfile-arm64 -t ffbuild-mini-arm64 .
+      - name: Build toolchain image (ubuntu18, 老glibc兼容)
+        run: docker build -f dual/Dockerfile -t ffbuild-dual .
 
-      - name: Build linux + win-x64 targets
+      - name: 备外库料（下源码包+验包）
         run: |
-          mkdir -p out
-          docker run --rm -v "$PWD:/src" -v "$PWD/out:/out" ffbuild-mini /build-one.sh linux-x64
-          docker run --rm -v "$PWD:/src" -v "$PWD/out:/out" ffbuild-mini-arm64 /build-one.sh linux-arm64
-          docker run --rm -v "$PWD:/src" -v "$PWD/out:/out" ffbuild-mini /build-one.sh win-x64
-          docker run --rm -v "$PWD:/src" -v "$PWD/out:/out" ffbuild-mini-32 /build-one.sh linux-386
-          docker run --rm -v "$PWD:/src" -v "$PWD/out:/out" ffbuild-mini-arm /build-one.sh linux-arm
-          for t in linux-x64 linux-arm64 win-x64 linux-386 linux-arm; do
-            test -f "out/$t/libgpui_ffmpeg.$(case $t in win-*) echo dll;; *) echo so;; esac)" \
-              || { echo "missing $t"; exit 1; }
+          docker run --rm \
+            -v /tmp/deps:/tmp/deps \
+            -e FREETYPE_VER -e HARFBUZZ_VER -e FRIBIDI_VER \
+            -e FONTCONFIG_VER -e LIBASS_VER -e OPENH264_VER \
+            -e OPENSSL_VER -e ZLIB_VER -e EXPAT_VER \
+            ffbuild-dual bash -c 'cd /tmp/deps && /build-deps.sh need-only && ls -la /tmp/deps/'
+          ls -la /tmp/deps/
+
+      - name: 编外库静态 .a（base 只用其中 openssl+zlib）
+        run: |
+          docker run --rm \
+            -v /tmp/deps:/tmp/deps \
+            -v /tmp/depopt:/opt \
+            -e FREETYPE_VER -e HARFBUZZ_VER -e FRIBIDI_VER \
+            -e FONTCONFIG_VER -e LIBASS_VER -e OPENH264_VER \
+            -e OPENSSL_VER -e ZLIB_VER -e EXPAT_VER \
+            ffbuild-dual /build-deps.sh "$DEPARCH"
+
+      - name: 取配方（dual/recipe，两档真源）
+        run: |
+          cd dual && go run ./recipe -variant base > "/tmp/recipe-base.flags"
+          go run ./recipe -variant full > "/tmp/recipe-full.flags"
+          head -c 200 "/tmp/recipe-base.flags"; echo
+
+      - name: 编单文件（base+full）
+        run: |
+          mkdir -p out /tmp/deps /tmp/depopt
+          docker run --rm \
+            -v "$PWD:/src" \
+            -v /tmp/recipe-base.flags:/tmp/recipe-base.flags \
+            -v /tmp/recipe-full.flags:/tmp/recipe-full.flags \
+            -v /tmp/deps:/tmp/deps \
+            -v /tmp/depopt:/opt \
+            -v "$PWD/out:/out" \
+            ffbuild-dual bash -c '/build-one.sh "$0" base && /build-one.sh "$0" full' "$TARGET"
+
+      - name: 许可门禁（禁 GPL/nonfree 字样）
+        run: |
+          for f in out/$TARGET/*; do
+            echo "checking $f"
+            echo "--- matched GPL/nonfree strings (empty means clean) ---"
+            strings "$f" | grep -iE "libx264|libx265|libfdk_aac" | sort -u | head -20 || true
+            echo "--- end of matches ---"
+            if strings "$f" | grep -iqE "libx264|libx265|libfdk_aac"; then
+              echo "GPL/nonfree 库混入，拒绝入库"; exit 1
+            fi
           done
-          ls -la out/*/libgpui_ffmpeg.*
-
-      - name: Build win-arm64 (llvm-mingw)
-        run: |
-          curl -sSL -o /tmp/llvm-mingw.tar.xz \
-            "https://github.com/mstorsjo/llvm-mingw/releases/download/20231003/llvm-mingw-20231003-msvcrt-ubuntu-20.04-x86_64.tar.xz"
-          mkdir -p /tmp/llvm-mingw && tar -xf /tmp/llvm-mingw.tar.xz -C /tmp/llvm-mingw --strip-components=1
-          curl -sSL -o /tmp/zlib.tgz \
-            "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz"
-          mkdir -p /tmp/zwinarm && tar -xzf /tmp/zlib.tgz -C /tmp/zwinarm
-          cd /tmp/zwinarm/zlib-1.3.1
-          export PATH=/tmp/llvm-mingw/bin:$PATH
-          CROSS_PREFIX=aarch64-w64-mingw32- CC=aarch64-w64-mingw32-gcc AR=aarch64-w64-mingw32-ar RANLIB=aarch64-w64-mingw32-ranlib CFLAGS="-fPIC -O2" ./configure --static --prefix=/tmp/zlib-w64arm
-          make
-          make install
-          cd "$GITHUB_WORKSPACE"
-          LLVM_MINGW=/tmp/llvm-mingw ZLIB_WINARM64=/tmp/zlib-w64arm SRC="$PWD" OUTDIR="$PWD/out" sh mini/build-win-arm64.sh
-          test -f out/win-arm64/libgpui_ffmpeg.dll || { echo "missing win-arm64"; exit 1; }
+          strings out/$TARGET/* 2>/dev/null | grep -i "LGPL version 2.1" | head -2
 
       - name: Rename for release assets
         run: |
           mkdir -p dist
-          cp out/linux-x64/libgpui_ffmpeg.so dist/libgpui_ffmpeg-linux-x64.so
-          cp out/linux-arm64/libgpui_ffmpeg.so dist/libgpui_ffmpeg-linux-arm64.so
-          cp out/linux-386/libgpui_ffmpeg.so dist/libgpui_ffmpeg-linux-386.so
-          cp out/linux-arm/libgpui_ffmpeg.so dist/libgpui_ffmpeg-linux-arm.so
-          cp out/win-x64/libgpui_ffmpeg.dll dist/libgpui_ffmpeg-win-x64.dll
-          cp out/win-arm64/libgpui_ffmpeg.dll dist/libgpui_ffmpeg-win-arm64.dll
+          cp "out/$TARGET/libgpui_ffmpeg.$LIBEXT" "dist/libgpui_ffmpeg-$TARGET.$LIBEXT"
+          cp "out/$TARGET/libgpui_ffmpeg_full.$LIBEXT" "dist/libgpui_ffmpeg_full-$TARGET.$LIBEXT"
           ls -la dist/
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v4
         with:
-          name: mini-linux-win
+          name: rel-${{ matrix.name }}
           path: dist/*
 
   mac:
-    # 照 rwgpu cd.yml：矩阵式起两个任务，一个编 x86_64，一个编 aarch64，
-    # 各出各的包，不在一台机器上硬交叉（M 机器编 Intel 包走 clang -arch，
-    # 脚本里最后用 lipo -info 验明正身）。
-    name: mini - ${{ matrix.name }}
+    name: ${{ matrix.tag }} (base+full)
     runs-on: macos-latest
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
-          - name: darwin-x64
-            target: x86_64-apple-darwin
-            arch: x86_64
-            tag: darwin-x64
-            archive-name: mini-darwin-x64
-          - name: darwin-aarch64
-            target: aarch64-apple-darwin
-            arch: aarch64
-            tag: darwin-arm64
-            archive-name: mini-darwin-aarch64
+          - {tag: darwin-x64, arch: x64}
+          - {tag: darwin-arm64, arch: arm64}
     env:
       MACOSX_DEPLOYMENT_TARGET: "10.13"
+      TARGET: ${{ matrix.tag }}
+      ARCH: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
-      - name: Install build tools
-        run: brew install nasm pkg-config
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
 
-      - name: Build darwin ${{ matrix.arch }}
+      - name: 装工具链（含 full 烧字件）
+        run: brew install nasm pkg-config meson ninja gperf freetype harfbuzz fontconfig fribidi libass openh264 || true
+
+      - name: 编 mac 外库静态 .a（仅 x64：brew 无 x86_64 瓶，源码编静态链）
+        if: matrix.arch == 'x64'
+        run: sh dual/build-deps-mac.sh x64
+
+      - name: 取配方并编单文件（base+full）
         run: |
-          mkdir -p out
-          SRC="$PWD" OUTDIR="$PWD/out" sh mini/build-mac.sh ${{ matrix.arch }} ${{ matrix.tag }}
-          test -f "out/${{ matrix.tag }}/libgpui_ffmpeg.dylib" || { echo "missing ${{ matrix.tag }}"; exit 1; }
+          cd dual && go run ./recipe -variant base > /tmp/recipe.flags
+          cd "$GITHUB_WORKSPACE"
+          SRC="$PWD" OUTDIR="$PWD/out" sh dual/build-one-mac.sh "$ARCH" base
+          cd dual && go run ./recipe -variant full > /tmp/recipe.flags
+          cd "$GITHUB_WORKSPACE"
+          SRC="$PWD" OUTDIR="$PWD/out" sh dual/build-one-mac.sh "$ARCH" full
+
+      - name: 许可门禁（禁 GPL/nonfree 字样）
+        run: |
+          for f in out/$TARGET/*.dylib; do
+            echo "checking $f"
+            echo "--- matched GPL/nonfree strings (empty means clean) ---"
+            strings "$f" | grep -iE "libx264|libx265|libfdk_aac" | sort -u | head -20 || true
+            echo "--- end of matches ---"
+            if strings "$f" | grep -iqE "libx264|libx265|libfdk_aac"; then
+              echo "GPL/nonfree 库混入，拒绝入库"; exit 1
+            fi
+          done
+
+      - name: Rename for release assets
+        run: |
           mkdir -p dist
-          cp "out/${{ matrix.tag }}/libgpui_ffmpeg.dylib" "dist/libgpui_ffmpeg-${{ matrix.tag }}.dylib"
+          cp "out/$TARGET/libgpui_ffmpeg.dylib" "dist/libgpui_ffmpeg-$TARGET.dylib"
+          cp "out/$TARGET/libgpui_ffmpeg_full.dylib" "dist/libgpui_ffmpeg_full-$TARGET.dylib"
           ls -la dist/
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.archive-name }}
+          name: rel-${{ matrix.tag }}
           path: dist/*
 
   mac-universal:
-    # 二合一通用包：把上面两个单架构包合成一个（本地脚本默认也这么干）。
-    name: mini - darwin-universal
+    # 二合一通用包（base/full 各一）：把上面两个单架构包合成一个。
+    name: darwin-universal (base+full)
     needs: [mac]
     runs-on: macos-latest
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v4
         with:
-          name: mini-darwin-x64
+          name: rel-darwin-x64
           path: single/x64
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v4
         with:
-          name: mini-darwin-aarch64
+          name: rel-darwin-arm64
           path: single/arm64
       - name: Merge universal
         run: |
           mkdir -p dist
           lipo -create single/x64/libgpui_ffmpeg-darwin-x64.dylib single/arm64/libgpui_ffmpeg-darwin-arm64.dylib \
             -output dist/libgpui_ffmpeg-darwin-universal.dylib
-          lipo -info dist/libgpui_ffmpeg-darwin-universal.dylib
+          lipo -create single/x64/libgpui_ffmpeg_full-darwin-x64.dylib single/arm64/libgpui_ffmpeg_full-darwin-arm64.dylib \
+            -output dist/libgpui_ffmpeg_full-darwin-universal.dylib
+          lipo -info dist/*.dylib
           ls -la dist/
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v4
         with:
-          name: mini-darwin-universal
+          name: rel-darwin-universal
           path: dist/*
 
   publish:
@@ -155,7 +214,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
@@ -164,11 +223,14 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
         run: |
           echo $GITHUB_SHA > dist/commit-sha
+          ls -la dist/
       - uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/*
           body: |
-            gpui 最小解码单文件（7.1 同一棵树，许可 LGPL 宽松）。
+            gpui 单文件 FFmpeg（7.1 同一棵树，许可 LGPL 宽松）。
+            基础版 libgpui_ffmpeg.* 只管看（解码+分流+滤镜）；
+            高级版 libgpui_ffmpeg_full.* 加写文件（复用+原生编码+烧字）。
             Linux 在 ubuntu18 容器里编（老系统兼容）；mac 最低支持 10.13；
-            Windows 用交叉编译（x64）与 llvm-mingw（arm64）。
+            Windows 用 mingw（x64）与 llvm-mingw（arm64）交叉编。

@@ -98,10 +98,12 @@ build_one_arch() { # arch-tag cc cxx
     esac
     (cd ossl-$TAG && perl ./Configure --prefix=$PF/ossl-$TAG no-shared -fPIC no-tests $OSSL_TGT $OSSL_PFX && make -j"$(nproc)" CC="$OSSL_MAKE_CC" AR="${OSSL_PFX#--cross-compile-prefix=}ar" RANLIB="${OSSL_PFX#--cross-compile-prefix=}ranlib" && make install_sw)
   fi
-  # w64 高级版暂只要写盒+原生编码（烧字外库 mingw 链复杂，缺则自动跳过）。
-  # w64arm（win-arm64）同样只要 zlib，ffmpeg 用 llvm-mingw 编真 ARM64。
+  # w64/w64arm（Windows 烧字静态链：freetype+harfbuzz+fribidi+fontconfig+
+  # libass 全用 mingw/llvm-mingw 源码编静态，win-full 与 linux/mac 对齐，
+  # 不再是“只写盒”。openssl 走系统 schannel，不编。
   case "$TAG" in
-    w64|w64arm) echo "deps $TAG done (zlib only)"; return 0 ;;
+    w64|w64arm) : ;;
+    *) echo "deps $TAG done (zlib only)"; return 0 ;;
   esac
   # freetype（静态，harfbuzz 关，免循环依赖）。
   # 交叉要递 --host（autoconf 不认 CC 前缀，得明说目标三元组，否则它拿
@@ -110,6 +112,7 @@ build_one_arch() { # arch-tag cc cxx
     x64) FT_HOST="" ;; arm64) FT_HOST="--host=aarch64-linux-gnu" ;;
     386) FT_HOST="--host=i686-linux-gnu" ;; arm) FT_HOST="--host=arm-linux-gnueabihf" ;;
     w64) FT_HOST="--host=x86_64-w64-mingw32" ;;
+    w64arm) FT_HOST="--host=aarch64-w64-mingw32" ;;
   esac
   rm -rf ft-$TAG && mkdir ft-$TAG && tar -xzf freetype-$FT.tar.gz -C ft-$TAG --strip-components=1
   (cd ft-$TAG && CC="$CC" CFLAGS="-fPIC" ./configure $FT_HOST --disable-shared --enable-static --without-harfbuzz --without-bzip2 --without-png --prefix=$PF/freetype-$TAG && make -j"$(nproc)" && make install)
@@ -184,6 +187,20 @@ cpu = 'x86_64'
 endian = 'little'
 EOF
       meson_cross="--cross-file /tmp/meson-cross-w64.ini" ;;
+    w64arm) cat > /tmp/meson-cross-w64arm.ini <<'EOF'
+[binaries]
+c = 'aarch64-w64-mingw32-clang'
+cpp = 'aarch64-w64-mingw32-clang++'
+ar = 'aarch64-w64-mingw32-ar'
+strip = 'aarch64-w64-mingw32-strip'
+pkgconfig = 'pkg-config'
+[host_machine]
+system = 'windows'
+cpu_family = 'aarch64'
+cpu = 'aarch64'
+endian = 'little'
+EOF
+      meson_cross="--cross-file /tmp/meson-cross-w64arm.ini" ;;
   esac
   # 386 的 meson 交叉：c_args 加 -m32（cross 文件里写死了 gcc，得补旗标）。
   case "$TAG" in
@@ -215,7 +232,7 @@ EOF
 
 arch_map() {
   case "$1" in
-    x64|w64) echo x86_64 ;; arm64) echo aarch64 ;; 386) echo i386 ;; arm) echo arm ;;
+    x64|w64) echo x86_64 ;; arm64|w64arm) echo aarch64 ;; 386) echo i386 ;; arm) echo arm ;;
   esac
 }
 

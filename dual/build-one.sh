@@ -49,6 +49,7 @@ if [ "$V" = "full" ]; then
   case "$T" in
     linux-x64) DETSFX=x64 ;; linux-arm64) DETSFX=arm64 ;;
     linux-386) DETSFX=386 ;; linux-arm) DETSFX=arm ;;
+    win-x64) DETSFX=w64 ;; win-arm64) DETSFX=w64arm ;;
     *) DETSFX="" ;;
   esac
   if [ -n "$DETSFX" ]; then
@@ -169,15 +170,15 @@ case "$T" in
     CC=arm-linux-gnueabihf-gcc ;;
   win-x64)
     ZLIB=/opt/zlib-w64
-    # Windows 高级版烧字：mingw 静态 freetype/harfbuzz/libass（后续备好再加，
-    # 缺则高级版暂只开写盒+原生编码，drawtext/subtitles 自动跳过）。
+    # Windows 高级版烧字：mingw 静态链（freetype+harfbuzz+fontconfig+
+    # fribidi+libass+openh264，见 build-deps.sh w64），与 linux/mac 对齐。
     CFG="$COMMON $FULL_DEPS_LINUX $HW_WIN --extra-cflags=-I$ZLIB/include --extra-ldflags=-L$ZLIB/lib --enable-cross-compile --cross-prefix=x86_64-w64-mingw32- --arch=x86_64 --target-os=mingw64"
     CC=x86_64-w64-mingw32-gcc; LIB="libgpui_ffmpeg.dll"
     if [ "$V" = "full" ]; then LIB="libgpui_ffmpeg_full.dll"; fi ;;
   win-arm64)
     ZLIB=/opt/zlib-w64arm
     # win-arm64 必须真 ARM64：用 llvm-mingw 的 clang（x86_64 mingw 打不出
-    # arm64，之前复用 x86_64 前缀是错的，已拆开）。同样先只开写盒+原生编码。
+    # arm64，之前复用 x86_64 前缀是错的，已拆开）。烧字静态链同 w64。
     CFG="$COMMON $FULL_DEPS_LINUX $HW_WIN --extra-cflags=-I$ZLIB/include --extra-ldflags=-L$ZLIB/lib --enable-cross-compile --cross-prefix=aarch64-w64-mingw32- --arch=aarch64 --target-os=mingw64 --cc=aarch64-w64-mingw32-clang"
     CC=aarch64-w64-mingw32-clang; LIB="libgpui_ffmpeg.dll"
     if [ "$V" = "full" ]; then LIB="libgpui_ffmpeg_full.dll"; fi ;;
@@ -209,31 +210,30 @@ MULDEFS="-Wl,--allow-multiple-definition"
 FULL_EXT=""
 if [ "$V" = "full" ]; then
   case "$T" in
-    win-*) FULL_EXT="" ;; # Windows mingw 静态烧字后续备好再加，先只开写盒+原生编码。
-    *)
-      FULL_PC=""
-      for pc in freetype2 harfbuzz fontconfig fribidi libass; do
-        if pkg-config --exists "$pc" 2>/dev/null; then
-          FULL_PC="$FULL_PC $(pkg-config --static --libs "$pc" 2>/dev/null)"
-        fi
-      done
-      FULL_OH=""
-      case "$T" in
-        linux-x64) OHSFX=x64 ;; linux-arm64) OHSFX=arm64 ;;
-        linux-386) OHSFX=386 ;; linux-arm) OHSFX=arm ;;
-        *) OHSFX=x64 ;;
-      esac
-      if [ -f "/opt/openh264-$OHSFX/lib/libopenh264.a" ]; then
-        FULL_OH="/opt/openh264-$OHSFX/lib/libopenh264.a"
-      fi
-      FULL_EXT="$FULL_PC $FULL_OH"
-      ;;
+    win-x64) OHSFX=w64 ;; win-arm64) OHSFX=w64arm ;;
+    linux-x64) OHSFX=x64 ;; linux-arm64) OHSFX=arm64 ;;
+    linux-386) OHSFX=386 ;; linux-arm) OHSFX=arm ;;
+    *) OHSFX=x64 ;;
+  esac
+  FULL_PC=""
+  for pc in freetype2 harfbuzz fontconfig fribidi libass; do
+    if pkg-config --exists "$pc" 2>/dev/null; then
+      FULL_PC="$FULL_PC $(pkg-config --static --libs "$pc" 2>/dev/null)"
+    fi
+  done
+  FULL_OH=""
+  if [ -f "/opt/openh264-$OHSFX/lib/libopenh264.a" ]; then
+    FULL_OH="/opt/openh264-$OHSFX/lib/libopenh264.a"
+  fi
+  FULL_EXT="$FULL_PC $FULL_OH"
+  case "$T" in
+    win-*) FULL_EXT="$FULL_EXT -lstdc++" ;; # mingw 链 C++ 静态库要显式带标准库。
   esac
 fi
 case "$T" in
   win-x64|win-arm64)
     # shellcheck disable=SC2086
-    $CC -shared -o "$OUT/$LIB" $WHOLE $MULDEFS $ZLIB/lib/libz.a -lole32 -lbcrypt -lws2_32 -lsecur32 -lm
+    $CC -shared -o "$OUT/$LIB" $WHOLE $MULDEFS $FULL_EXT $ZLIB/lib/libz.a -static-libgcc -static-libstdc++ -lole32 -lbcrypt -lws2_32 -lsecur32 -lm
     ;;
   *)
     case "$T" in
@@ -255,12 +255,17 @@ if [ "$V" = "full" ]; then
     *) tmp_tool="nm" ;;
   esac
   case "$T" in
-    win-*) # Windows 暂只要求写盒（烧字后续备好再加）。
+    win-*)
       # 注意：DLL 没有 ELF 动态符号表，nm -D 报 no symbols，
       # 必须用不带 -D 的 nm 查（Linux .so 才用 -D）。
-      if ! $tmp_tool --defined-only "$OUT/$LIB" 2>/dev/null | grep -q "av_muxer_iterate"; then
-        echo "FAIL: full 版缺 av_muxer_iterate 符号" >&2; exit 1
-      fi
+      fail=0
+      for sym in av_muxer_iterate ff_vf_drawtext ff_vf_subtitles ff_vf_ass ff_libopenh264_encoder ff_ass_encoder; do
+        if ! $tmp_tool --defined-only "$OUT/$LIB" 2>/dev/null | grep -q "$sym"; then
+          echo "FAIL: full 版缺 $sym（写盒/烧字/openh264 未全进）" >&2; fail=1
+        fi
+      done
+      if [ "$fail" != "0" ]; then exit 1; fi
+      echo "PASS: full 门禁（写盒+烧字三滤镜+openh264+ass 编码全在）"
       ;;
     *)
       fail=0

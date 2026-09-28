@@ -56,16 +56,18 @@ linux-x64-base → linux-x64-full → linux-arm64-base/full → linux-386-base/f
   或者调 `api.github.com/repos/energye/ffmpeg/actions/runs` 查状态和结论。
 - 完整报错文本需要从网页上复制，或者配一个能读 Actions 的 token 后用接口拉。
 
-## 7. 当前状态（2026-09-28，16 个输出已全绿）
+## 7. 当前状态（2026-09-28，调试收工，单发布流已接好）
 
 - 调试流最终绿标签：linux-x64-base-003、linux-x64-full-001、linux-arm64-base/full-001、
   linux-386-base/full-001、linux-arm-base/full-001、win-x64-base-001、win-x64-full-002、
   win-arm64-base/full-001、darwin-arm64-base-009、darwin-arm64-full-001、
   darwin-x64-base-001、darwin-x64-full-033。
-- mac x64-full 是最难的一块（arm64 runner 上交叉编 x86_64），关键修复都在
-  `dual/build-deps-mac.sh`（x86_64 源码静态链：freetype 关 brotli、harfbuzz 合并
-  `-Dcpp_args`、fontconfig 绕开 arm64 json-c 只装 src+头+手补 `.pc` 并补 expat、
-  自建 libunibreak 8.0、openh264 `.pc` 补 `-lc++`）和 `dual/build-one-mac.sh`
- （编前 `.pc` 诊断、失败吐 config 尾）。
-- 下一步：按第 3 节，把 `dual/` 接进发版流 `build-mini.yml`（16 个一次编完随
-  release 发布），`mini/` 最小版到时再定去留。
+- 调试流 `.github/workflows/debug-mini.yml` 已删除，不再触发任何构建。
+- 唯一构建入口：`.github/workflows/build-mini.yml`（release published + 手动触发），
+  一次编出 8 架构 × 2 版本 = 16 个单文件 + darwin 通用包（base/full 各一），
+  随 release 自动上传（publish 口径照 rwgpu cd.yml：分组 job + artifact +
+  softprops/action-gh-release）。
+- 平台分工：linux-* 与 win-*（mingw/llvm-mingw 交叉）在 ubuntu-22.04 容器里编；
+  darwin-* 在 macos 原生编。win-full 烧字已与 linux/mac 对齐（w64/w64arm 烧字
+  静态链见 `dual/build-deps.sh`，终链与门禁见 `dual/build-one.sh`）。
+- `mini/` 最小版和旧发版逻辑已由 `dual/` 取代，到时再定去留。

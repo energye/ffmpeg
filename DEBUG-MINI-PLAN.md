@@ -56,11 +56,16 @@ linux-x64-base → linux-x64-full → linux-arm64-base/full → linux-386-base/f
   或者调 `api.github.com/repos/energye/ffmpeg/actions/runs` 查状态和结论。
 - 完整报错文本需要从网页上复制，或者配一个能读 Actions 的 token 后用接口拉。
 
-## 7. 当前状态（2026-09-28）
+## 7. 当前状态（2026-09-28，16 个输出已全绿）
 
-- `dual/`、`debug-mini.yml`、本开工文档都是本次的新文件，已提交推送。
-- 触发条件已验过：分支推送不触发任何流；`debug-mini-*` 标签只进调试流；release 只进发版流。
-- 发版流程无运行记录，16 个输出全绿之前不动 `build-mini.yml` 和 `mini/`；全绿后把 `dual/` 接进发版流（16 个一次编完，随 release 发布），`mini/` 最小版到时再定去留。
-- 已知坑：工作流里 action 版本号（checkout/upload@v7、download@v8）是照抄仓里原文件的，
-  首跑如果连检出这步都红，先查版本号是否存在。
-- 下一步：打第一个标签 `debug-mini-linux-x64-base-001` 开调。
+- 调试流最终绿标签：linux-x64-base-003、linux-x64-full-001、linux-arm64-base/full-001、
+  linux-386-base/full-001、linux-arm-base/full-001、win-x64-base-001、win-x64-full-002、
+  win-arm64-base/full-001、darwin-arm64-base-009、darwin-arm64-full-001、
+  darwin-x64-base-001、darwin-x64-full-033。
+- mac x64-full 是最难的一块（arm64 runner 上交叉编 x86_64），关键修复都在
+  `dual/build-deps-mac.sh`（x86_64 源码静态链：freetype 关 brotli、harfbuzz 合并
+  `-Dcpp_args`、fontconfig 绕开 arm64 json-c 只装 src+头+手补 `.pc` 并补 expat、
+  自建 libunibreak 8.0、openh264 `.pc` 补 `-lc++`）和 `dual/build-one-mac.sh`
+ （编前 `.pc` 诊断、失败吐 config 尾）。
+- 下一步：按第 3 节，把 `dual/` 接进发版流 `build-mini.yml`（16 个一次编完随
+  release 发布），`mini/` 最小版到时再定去留。

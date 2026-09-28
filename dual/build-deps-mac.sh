@@ -83,25 +83,15 @@ build_one_arch() { # arch-tag
   check_arch $PF/freetype-$TAG/lib/libfreetype.a $OARCH
 
   # meson 交叉描述（Darwin 同系统跨架构，native 配 CFLAGS 不认，必须明说）。
-  # 注意：-arch 旗标放 [properties] 会被吞（实测 015 全变 arm64），放
-  # [built-in options] 才进编译行；且必须同时给 c_* 和 cpp_*（harfbuzz
-  # 主体是 C++，只给 c_* 的话 C++ 对象还是 arm64）。
+  # 注意：-arch 旗标放 [binaries]/[properties] 会被吞（015/017 实测全变
+  # arm64），只放 [built-in options]；pkgconfig 条目改新名 pkg-config。
   cat > /tmp/meson-mac-$TAG.ini <<EOF
 [binaries]
 c = 'clang'
 cpp = 'clang++'
 ar = 'ar'
 strip = 'strip'
-pkgconfig = 'pkg-config'
-c_args = ['-arch', '$OARCH']
-c_link_args = ['-arch', '$OARCH']
-cpp_args = ['-arch', '$OARCH']
-cpp_link_args = ['-arch', '$OARCH']
-[properties]
-c_args = ['-arch', '$OARCH']
-c_link_args = ['-arch', '$OARCH']
-cpp_args = ['-arch', '$OARCH']
-cpp_link_args = ['-arch', '$OARCH']
+pkg-config = 'pkg-config'
 [built-in options]
 c_args = ['-arch', '$OARCH']
 c_link_args = ['-arch', '$OARCH']
@@ -113,6 +103,13 @@ cpu_family = 'x86_64'
 cpu = 'x86_64'
 endian = 'little'
 EOF
+  # 交叉前自检：空工程试编，确认 -arch 真进编译行（免得编完才验出 arm64）。
+  rm -rf /tmp/meson-probe-$TAG && mkdir -p /tmp/meson-probe-$TAG/src \
+    && printf 'int main(void){return 0;}\n' > /tmp/meson-probe-$TAG/src/probe.c \
+    && printf "project('probe', 'c')\nexecutable('probe', 'src/probe.c', native: false)\n" > /tmp/meson-probe-$TAG/meson.build \
+    && (cd /tmp/meson-probe-$TAG && meson setup --cross-file /tmp/meson-mac-$TAG.ini build >/dev/null && ninja -C build -v 2>&1 | grep -a -m1 'clang.*probe' | grep -a -q -- "-arch $OARCH") \
+    || { echo "FAIL: cross 文件 -arch 未生效" >&2; exit 5; }
+  echo "cross probe ok: -arch $OARCH 生效"
   # harfbuzz（静态，指向上一步的 freetype；glib 等全关，免得链进 arm64 瓶）。
   # 注意：10.13 部署目标下新 SDK 的 math.h 只声明 __sincosf，不声明 sincosf
   # （harfbuzz VarCompositeGlyph.hh 用了它，_GNU_SOURCE 也救不回来），

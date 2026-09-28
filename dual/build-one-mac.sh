@@ -40,7 +40,7 @@ fi
 if [ -d /opt/homebrew/opt/openh264/lib/pkgconfig ]; then
   export PKG_CONFIG_PATH="/opt/homebrew/opt/openh264/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 fi
-trap 'echo "=== config.log libass ==="; grep -a -A15 "check_pkg_config libass" ffbuild/config.log 2>/dev/null | head -40 || true' EXIT
+trap 'echo "=== config.log libass ==="; grep -a -A8 "check_func_headers ass/ass.h" ffbuild/config.log 2>/dev/null | head -25 || true' EXIT
 # full 缺料容错（同 build-one.sh）：pkg-config 找不到就丢开关+连带滤镜。
 FULL_DEPS_MAC=""
 FULL_DROP=""
@@ -93,7 +93,11 @@ case "$ARCH" in
     printf '#!/bin/sh\nexec cc -arch x86_64 "$@"\n' > "$BLD/clang-x64"
     chmod +x "$BLD/clang-x64"
     MAC_CC="$BLD/clang-x64"
-    ARCHFLAG="--arch=x86_64 --target-os=darwin --cc=$BLD/clang-x64"
+    # x64 跑在 arm64 机器上，ld 必须同步用 -arch x86_64 的垫片，
+    # 否则试链用裸 cc 吐 arm64，-lass 无 x86_64 片直接挂。
+    printf '#!/bin/sh\nexec cc -arch x86_64 "$@"\n' > "$BLD/ld-x64"
+    chmod +x "$BLD/ld-x64"
+    ARCHFLAG="--arch=x86_64 --target-os=darwin --cc=$BLD/clang-x64 --ld=$BLD/ld-x64"
     ;;
   *) echo "unknown arch $ARCH" >&2; exit 2 ;;
 esac

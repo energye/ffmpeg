@@ -215,7 +215,7 @@ EOF
   # fribidi + fontconfig + libass（静态；fribidi 同样钉 --libdir=lib）。
   rm -rf fb-$TAG && mkdir fb-$TAG && tar -xJf fribidi-$FB.tar.xz -C fb-$TAG --strip-components=1
   (cd fb-$TAG && CC="$CC" CFLAGS="$MESON_CFLAGS" meson setup $meson_cross -Dtests=false -Ddocs=false -Dbin=false --default-library=static --libdir=lib --prefix=$PF/fribidi-$TAG build && ninja -C build && ninja -C build install)
-  rm -rf fc-$TAG && mkdir fc-$TAG && tar -xzf fontconfig-$FC.tar.gz -C fc-$TAG --strip-components=1
+  rm -rf fc-$TAG && mkdir fc-$TAG && tar -xzf fontconfig-$FC.tar.gz -C fc-$TAG --strip-components=1 && test -f fc-$TAG/configure || { echo "FAIL: fontconfig 包不含 configure（疑似坏包）" >&2; ls -la fc-$TAG | head; exit 3; }
   # LDFLAGS 指到自建 zlib-$TAG：fc-cache 等工具二进制要链 -lz，交叉目标（386/arm64/arm）
   # 在宿主 /usr/lib 下只有 x86_64 的 libz 会炸（实测 386 挂在 fc-cache 链接上），库本身不欠账。
   (cd fc-$TAG && CC="$CC" CFLAGS="-fPIC" LDFLAGS="-L$PF/zlib-$TAG/lib" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig:$PF/zlib-$TAG/lib/pkgconfig ./configure $FT_HOST --disable-shared --enable-static --disable-docs --disable-libxml2 --with-expat=$PF/expat-$TAG --prefix=$PF/fontconfig-$TAG && make -j"$(nproc)" && make install)

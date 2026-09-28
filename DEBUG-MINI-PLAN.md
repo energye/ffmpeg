@@ -63,7 +63,7 @@ linux-x64-base → linux-x64-full → linux-arm64-base/full → linux-386-base/f
   win-arm64-base/full-001、darwin-arm64-base-009、darwin-arm64-full-001、
   darwin-x64-base-001、darwin-x64-full-033。
 - 调试流 `.github/workflows/debug-mini.yml` 已删除，不再触发任何构建。
-- 唯一构建入口：`.github/workflows/build-mini.yml`（release published + 手动触发），
+- 唯一构建入口：`.github/workflows/release.yml`（release published + 手动触发），
   一次编出 8 架构 × 2 版本 = 16 个单文件 + darwin 通用包（base/full 各一），
   随 release 自动上传（publish 口径照 rwgpu cd.yml：分组 job + artifact +
   softprops/action-gh-release）。

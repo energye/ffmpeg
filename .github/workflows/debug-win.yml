@@ -9,7 +9,7 @@ name: debug-win
 # 同名标签推不上去，重试必须把尾巴数字加一。
 # 开关：调 win 时启用本文件，调别的平台时用
 #   gh workflow disable debug-win.yml 把本文件停掉（反之启用）。
-# 调通后合入 build-mini.yml 统一发版（本文件的步骤与发版流 linux-win
+# 调通后合入 release.yml 统一发版（本文件的步骤与发版流 linux-win
 # 侧同源，合入时直接搬）。
 
 on:

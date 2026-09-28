@@ -83,6 +83,8 @@ build_one_arch() { # arch-tag
   check_arch $PF/freetype-$TAG/lib/libfreetype.a $OARCH
 
   # meson 交叉描述（Darwin 同系统跨架构，native 配 CFLAGS 不认，必须明说）。
+  # 注意：CPU 名用 meson 短名；-arch 旗标放 [properties] meson 会吞
+  # （实测 015 丢旗全变 arm64），改放 [built-in options]。
   cat > /tmp/meson-mac-$TAG.ini <<EOF
 [binaries]
 c = 'clang'
@@ -90,15 +92,15 @@ cpp = 'clang++'
 ar = 'ar'
 strip = 'strip'
 pkgconfig = 'pkg-config'
-[properties]
+[built-in options]
 c_args = ['-arch', '$OARCH']
 c_link_args = ['-arch', '$OARCH']
 cpp_args = ['-arch', '$OARCH']
 cpp_link_args = ['-arch', '$OARCH']
 [host_machine]
 system = 'darwin'
-cpu_family = '$OARCH'
-cpu = '$OARCH'
+cpu_family = 'x86_64'
+cpu = 'x86_64'
 endian = 'little'
 EOF
   # harfbuzz（静态，指向上一步的 freetype；glib 等全关，免得链进 arm64 瓶）。

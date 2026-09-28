@@ -144,5 +144,5 @@ fi
 # shellcheck disable=SC2086
 # MULDEFS 见上：mac 关掉 exr/phm 后冲突消失，这里直接链原包。
 $MAC_CC -dynamiclib -o "$OUT/$LIB" $WHOLE $FULL_EXT -lm -lpthread -ldl -lz \
-  -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework Security
+  -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework Security -framework CoreFoundation
 ls -la "$OUT/$LIB"

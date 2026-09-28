@@ -102,8 +102,10 @@ cpu = '$OARCH'
 endian = 'little'
 EOF
   # harfbuzz（静态，指向上一步的 freetype；glib 等全关，免得链进 arm64 瓶）。
+  # 注意：10.13 部署目标下新 SDK 的 math.h 不声明 sincosf（harfbuzz 用了它），
+  # 必须给 C++ 补 -D_GNU_SOURCE 才能声明出来，否则编到 hb-ot-font 就挂。
   rm -rf hb-$TAG && mkdir hb-$TAG && tar -xJf harfbuzz-$HB.tar.xz -C hb-$TAG --strip-components=1
-  (cd hb-$TAG && PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig meson setup --cross-file /tmp/meson-mac-$TAG.ini -Dtests=disabled -Dutilities=disabled -Ddocs=disabled -Dglib=disabled -Dgobject=disabled -Dcairo=disabled -Dchafa=disabled -Dicu=disabled --default-library=static --libdir=lib --prefix=$PF/harfbuzz-$TAG build && ninja -C build && ninja -C build install)
+  (cd hb-$TAG && PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig CXXFLAGS="-O2 $ARCHC -D_GNU_SOURCE" meson setup --cross-file /tmp/meson-mac-$TAG.ini -Dtests=disabled -Dutilities=disabled -Ddocs=disabled -Dglib=disabled -Dgobject=disabled -Dcairo=disabled -Dchafa=disabled -Dicu=disabled --default-library=static --libdir=lib --prefix=$PF/harfbuzz-$TAG build && ninja -C build && ninja -C build install)
   check_arch $PF/harfbuzz-$TAG/lib/libharfbuzz.a $OARCH
 
   # fribidi（静态）。

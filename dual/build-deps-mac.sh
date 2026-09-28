@@ -182,7 +182,16 @@ OpenH264Version WelsGetCodecVersion(void) {
 }
 EOF
   (cd h264-$TAG && make CC="clang $ARCHC" CXX="clang++ $ARCHC" ARCH=$(arch_map "$TAG") USE_ASM=No -j"$NCPU" && make CC="clang $ARCHC" CXX="clang++ $ARCHC" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG install && rm -f $PF/openh264-$TAG/lib/libopenh264.*.dylib $PF/openh264-$TAG/lib/libopenh264.dylib)
-  (cd h264-$TAG && clang $ARCHC -c -fPIC -Icodec/api ohver-shim.c -o ohver-shim.o && ar r $PF/openh264-$TAG/lib/libopenh264.a ohver-shim.o && echo "openh264 版本探针垫片已并入 mac-$TAG 的 .a" >&2) || { echo "FAIL: mac-$TAG 垫片失败" >&2; exit 1; }
+  # 垫片只在“库里没实现”时并入：2.6.0 的 clang 编出来已有该符号
+  #（mac 上 -dynamiclib 阶段没报缺），并入反而 duplicate。
+  # 用 nm 查 .a 里有没有 T 定义，没有才 ar 进去（OHAAR_MAC 未定义，
+  # 直接用 ar；mac 本机 ar 不分架构）。
+  OHA_MAC="$PF/openh264-$TAG/lib/libopenh264.a"
+  if nm -A "$OHA_MAC" 2>/dev/null | grep -q "T _WelsGetCodecVersion"; then
+    echo "openh264-$TAG 的 .a 自带版本探针，不并垫片" >&2
+  else
+    (cd h264-$TAG && clang $ARCHC -c -fPIC -Icodec/api ohver-shim.c -o ohver-shim.o && ar r "$OHA_MAC" ohver-shim.o && echo "openh264 版本探针垫片已并入 mac-$TAG 的 .a" >&2) || { echo "FAIL: mac-$TAG 垫片失败" >&2; exit 1; }
+  fi
   OHPC=$PF/openh264-$TAG/lib/pkgconfig/openh264.pc
   if [ -f "$OHPC" ]; then
     sed -i '' 's/-lstdc++/-lc++/g' "$OHPC" && sed -i '' 's|^Libs: \(.*\)$|Libs: \1 -lc++|' "$OHPC"

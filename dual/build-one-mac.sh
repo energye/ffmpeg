@@ -89,15 +89,16 @@ MAC_BASE="--enable-videotoolbox --enable-hwaccel=h264_videotoolbox --enable-hwac
 # configure 和最后链接都走它（arm64 原生走系统 cc，不动）。
 MAC_CC=cc
 case "$ARCH" in
-  arm64) ARCHFLAG="--arch=arm64 --target-os=darwin" ;;
+  arm64) ARCHFLAG="--arch=arm64 --target-os=darwin --enable-cross-compile" ;;
   x64)
     printf '#!/bin/sh\nexec clang -arch x86_64 "$@"\n' > "$BLD/clang-x64"
     chmod +x "$BLD/clang-x64"
     MAC_CC="$BLD/clang-x64"
-    # x64 跑在 arm64 机器上是交叉：--pkg-config 固定用真 x86_64 的 pkg-config，
-    # 不让 configure 按交叉前缀去找不存在的 x86_64-apple-darwin-pkg-config
-    # （实测找不到就回退 false，外库检测全灭）。
-    ARCHFLAG="--arch=x86_64 --target-os=darwin --cc=$BLD/clang-x64 --pkg-config=pkg-config"
+    # x64 跑在 arm64 机器上，configure 按 --arch 误判交叉（实测
+    # --enable-cross-compile 在 x86_64+darwin 下是空操作，不影响），
+    # 干脆显式声明交叉并钉死 --pkg-config（默认按交叉前缀找
+    # x86_64-apple-darwin-pkg-config，不存在就回退 false，外库全灭）。
+    ARCHFLAG="--arch=x86_64 --target-os=darwin --enable-cross-compile --cc=$BLD/clang-x64 --pkg-config=pkg-config"
     ;;
   *) echo "unknown arch $ARCH" >&2; exit 2 ;;
 esac

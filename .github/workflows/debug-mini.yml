@@ -21,7 +21,7 @@ jobs:
     if: startsWith(github.ref_name, 'debug-mini-linux-') || startsWith(github.ref_name, 'debug-mini-win-')
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Parse target+variant from tag
         run: |
@@ -51,8 +51,7 @@ jobs:
           cd dual && go run ./recipe -variant "$VARIANT" > "/tmp/recipe-$VARIANT.flags"
           head -c 300 "/tmp/recipe-$VARIANT.flags"; echo
 
-      - name: 备外库料（仅 full：下源码包+验包）
-        if: env.VARIANT == 'full'
+      - name: 备外库料（下源码包+验包，base 只用其中 openssl+zlib）
         run: |
           docker build -f dual/Dockerfile -t ffbuild-dual .
           docker run --rm \
@@ -63,8 +62,7 @@ jobs:
             ffbuild-dual bash -c 'cd /tmp/deps && /build-deps.sh need-only; ls -la /tmp/deps/'
           ls -la /tmp/deps/
 
-      - name: 编外库静态 .a（仅 full：对号入座）
-        if: env.VARIANT == 'full'
+      - name: 编外库静态 .a（对号入座，base 只用其中 ossl+zlib）
         run: |
           case "$TARGET" in
             linux-x64) DEPARCH=x64 ;; linux-arm64) DEPARCH=arm64 ;;
@@ -81,6 +79,7 @@ jobs:
 
       - name: 编单文件
         run: |
+          mkdir -p out /tmp/deps /tmp/depopt
           docker build -f dual/Dockerfile -t ffbuild-dual .
           docker run --rm \
             -v "$PWD:/src" \
@@ -113,7 +112,7 @@ jobs:
           fi
           strings "$f" | grep -i "LGPL version 2.1" | head -2
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ github.ref_name }}
           path: out/*
@@ -124,7 +123,7 @@ jobs:
     env:
       MACOSX_DEPLOYMENT_TARGET: "10.13"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Parse target+variant from tag
         run: |
@@ -176,7 +175,7 @@ jobs:
             echo "GPL/nonfree 库混入，拒绝入库"; exit 1
           fi
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ github.ref_name }}
           path: out/*

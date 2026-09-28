@@ -45,10 +45,11 @@ need fontconfig-$FC.tar.gz "https://www.freedesktop.org/software/fontconfig/rele
 need libass-$ASS.tar.gz "https://github.com/libass/libass/releases/download/$ASS/libass-$ASS.tar.gz"
 need openh264-$H264.tar.gz "https://github.com/cisco/openh264/archive/refs/tags/v$H264.tar.gz"
 need openssl-$OSSL.tar.gz "https://www.openssl.org/source/openssl-$OSSL.tar.gz"
-need zlib-$ZL.tar.gz "https://zlib.net/zlib-$ZL.tar.gz"
+need zlib-$ZL.tar.gz "https://zlib.net/zlib-$ZL.tar.gz" \
+  "https://github.com/madler/zlib/releases/download/v$ZL/zlib-$ZL.tar.gz"
 need expat-$EXPAT.tar.gz "https://github.com/libexpat/libexpat/releases/download/R_2_6_4/expat-$EXPAT.tar.gz"
 # 完整性门禁：坏包直接报错，不让半截包混进编译。
-for f in freetype-$FT.tar.gz harfbuzz-$HB.tar.xz fribidi-$FB.tar.xz fontconfig-$FC.tar.gz libass-$ASS.tar.gz openh264-$H264.tar.gz expat-$EXPAT.tar.gz; do
+for f in freetype-$FT.tar.gz harfbuzz-$HB.tar.xz fribidi-$FB.tar.xz fontconfig-$FC.tar.gz libass-$ASS.tar.gz openh264-$H264.tar.gz openssl-$OSSL.tar.gz zlib-$ZL.tar.gz expat-$EXPAT.tar.gz; do
   verify "$f" || { echo "BAD TARBALL $f，删掉重下" >&2; rm -f "$f"; exit 3; }
 done
 

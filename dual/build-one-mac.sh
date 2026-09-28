@@ -29,9 +29,7 @@ fi
 
 # mac 编 x64 是交叉（-arch x86_64 皮），configure 的 pkg-config 检测
 # 跑的是 x86_64 二进制，brew 的 arm64 .pc 缺 x86_64 段就报找不到。
-# 先把 PKG_CONFIG_PATH 指到 brew 前缀；同时注意 configure 里
-# --pkg-config-flags=--static 影响检测（静态拿 Libs.private），
-# 先不加该旗标，等检测通过再说。
+# 先把 PKG_CONFIG_PATH 指到 brew 前缀。
 if [ -d /opt/homebrew/lib/pkgconfig ]; then
   export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 fi
@@ -41,9 +39,6 @@ fi
 if [ -d /opt/homebrew/opt/openh264/lib/pkgconfig ]; then
   export PKG_CONFIG_PATH="/opt/homebrew/opt/openh264/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 fi
-echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
-echo "pkg-config version: $(pkg-config --version 2>&1)"
-echo "libass static libs: $(pkg-config --static --libs libass 2>&1 | head -c 300)"
 # full 缺料容错（同 build-one.sh）：pkg-config 找不到就丢开关+连带滤镜。
 FULL_DEPS_MAC=""
 FULL_DROP=""
@@ -91,16 +86,12 @@ MAC_BASE="--enable-videotoolbox --enable-hwaccel=h264_videotoolbox --enable-hwac
 # configure 和最后链接都走它（arm64 原生走系统 cc，不动）。
 MAC_CC=cc
 case "$ARCH" in
-  arm64) ARCHFLAG="--arch=arm64 --target-os=darwin --enable-cross-compile" ;;
+  arm64) ARCHFLAG="--arch=arm64 --target-os=darwin" ;;
   x64)
     printf '#!/bin/sh\nexec clang -arch x86_64 "$@"\n' > "$BLD/clang-x64"
     chmod +x "$BLD/clang-x64"
     MAC_CC="$BLD/clang-x64"
-    # x64 跑在 arm64 机器上，configure 按 --arch 误判交叉（实测
-    # --enable-cross-compile 在 x86_64+darwin 下是空操作，不影响），
-    # 干脆显式声明交叉并钉死 --pkg-config（默认按交叉前缀找
-    # x86_64-apple-darwin-pkg-config，不存在就回退 false，外库全灭）。
-    ARCHFLAG="--arch=x86_64 --target-os=darwin --enable-cross-compile --cc=$BLD/clang-x64 --pkg-config=pkg-config"
+    ARCHFLAG="--arch=x86_64 --target-os=darwin --cc=$BLD/clang-x64"
     ;;
   *) echo "unknown arch $ARCH" >&2; exit 2 ;;
 esac

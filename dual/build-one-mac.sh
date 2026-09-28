@@ -100,6 +100,9 @@ if [ "$V" = "full" ]; then
   FULL_EXT="$FULL_EXT $OH"
 fi
 # shellcheck disable=SC2086
-$MAC_CC -dynamiclib -o "$OUT/$LIB" $WHOLE $FULL_EXT -lm -lpthread -ldl -lz \
+# MULDEFS：exr 解码器把 half2float.o 带进 libavcodec，和 libswscale 自带的
+# 同名文件重复定义（内容一样）。Linux 用 --allow-multiple-definition 取第一份；
+# mac 的 ld 等价开关是 -Wl,-m（allow_multiple_definition），和 -all_load 同用。
+$MAC_CC -dynamiclib -o "$OUT/$LIB" $WHOLE -Wl,-m $FULL_EXT -lm -lpthread -ldl -lz \
   -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework Security
 ls -la "$OUT/$LIB"

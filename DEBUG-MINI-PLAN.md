@@ -61,7 +61,18 @@ linux-x64-base → linux-x64-full → linux-arm64-base/full → linux-386-base/f
   或者调 `api.github.com/repos/energye/ffmpeg/actions/runs` 查状态和结论。
 - 完整报错文本需要从网页上复制，或者配一个能读 Actions 的 token 后用接口拉。
 
-## 7. 当前状态（2026-09-28，新基座+新依赖已进仓，逐平台重验中）
+## 7. 当前状态（2026-09-29，三平台16组合全绿+release全绿）
+
+- 新基座新依赖全绿标签（base+full各8个）：linux-x64-base-004/full-002、
+  linux-arm64-base-002/full-004、linux-386-base-002/full-004、
+  linux-arm-base-002/full-004、win-x64-base-002/full-010、
+  win-arm64-base-002/full-008、darwin-x64-base-003/full-036、
+  darwin-arm64-base-011/full-003。
+- mac base曾挂终链CF符号（videotoolbox需CoreFoundation，base无libass传递），
+  已在dual/build-one-mac.sh终链补-framework CoreFoundation后翻绿。
+- release.yml已合入验证步骤并跑通workflow_dispatch全量构建（run 36498285214，
+  8矩阵+universal全success，publish按预期skip）：16单文件+darwin通用包base/full各一，
+  LGPL门禁全过，可随release发布。
 
 - 旧基座旧依赖的绿标签：linux-x64-base-003、linux-x64-full-001/002、
   linux-arm64/386/arm-full-002、win-x64-base-001、win-x64-full-002/006、

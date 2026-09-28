@@ -10,6 +10,7 @@ set -e
 WHICH="${1:-x64}"
 SRC=/tmp/macdeps-src
 PF="${MACDEPS_PREFIX:-/tmp/macdeps}"
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$SRC" "$PF"
 cd "$SRC"
 
@@ -25,7 +26,17 @@ UB=${LIBUNIBREAK_VER:-8.0}
 NCPU=$(sysctl -n hw.ncpu 2>/dev/null || echo 4)
 
 need() { # file url [fallback-url]
-  if [ -f "$1" ]; then return 0; fi
+  # 第一优先级：本仓 third_party 预置包（离线可用，CI 不再碰外网）。
+  # 工作流把仓根挂在 $SRC_DIR（见 yml），mac 脚本直接读仓内目录。
+  if [ ! -f "$1" ]; then
+    for cand in "${SRC_DIR:-$REPO}/third_party/$1" "$(dirname "$0")/../third_party/$1"; do
+      if [ -f "$cand" ]; then cp -f "$cand" "$1"; break; fi
+    done
+  fi
+  if [ -f "$1" ]; then
+    if verify "$1" 2>/dev/null; then return 0; fi
+    echo "local $1 bad, removing" >&2; rm -f "$1"
+  fi
   if curl -fSL --retry 3 --retry-all-errors --max-time 120 -o "$1" "$2" && verify "$1" 2>/dev/null; then
     return 0
   fi
@@ -126,11 +137,24 @@ EOF
   (cd fb-$TAG && meson setup --cross-file /tmp/meson-mac-$TAG.ini -Dtests=false -Ddocs=false -Dbin=false '-Dc_args=-arch x86_64' '-Dcpp_args=-arch x86_64' '-Dc_link_args=-arch x86_64' '-Dcpp_link_args=-arch x86_64' --default-library=static --libdir=lib --prefix=$PF/fribidi-$TAG build && ninja -C build && ninja -C build install)
   check_arch $PF/fribidi-$TAG/lib/libfribidi.a $OARCH
 
-  # fontconfig（静态，指自建三件；libxml2 关，文档关；只编装库相关目标，
+  # fontconfig（静态，指自建三件；libxml2 关，文档关）。
+  # 包有两种：官网 release（含 configure，走 autotools，只编装库相关目标，
   # 不进 test 目录：test-conf 链 brew 的 arm64 json-c 必挂，且顶层 make
-  # 会连带编它；src 子目录目标在源码树内编，别名头需先在顶层 make 生成）。
+  # 会连带编它；src 子目录目标在源码树内编，别名头需先在顶层 make 生成）
+  # 与 GitHub 镜像（纯源码树，无 configure，走 meson；本仓预置的是后者）。
   rm -rf fc-$TAG && mkdir fc-$TAG && tar -xzf fontconfig-$FC.tar.gz -C fc-$TAG --strip-components=1
-  (cd fc-$TAG && PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig ./configure $HOST --disable-shared --enable-static --disable-docs --disable-libxml2 --with-expat=$PF/expat-$TAG --prefix=$PF/fontconfig-$TAG && make -C src fcalias.h fcaliastail.h fcftalias.h fcftaliastail.h fcobjshash.h && make -C src libfontconfig.la && make -C src install && make -C fontconfig install && mkdir -p $PF/fontconfig-$TAG/lib/pkgconfig && cp -f fontconfig.pc $PF/fontconfig-$TAG/lib/pkgconfig/ && EXPLIB=$(PKG_CONFIG_PATH=$PF/expat-$TAG/lib/pkgconfig pkg-config --libs expat 2>/dev/null || echo "-L$PF/expat-$TAG/lib -lexpat") && sed -i '' "s|^Libs: \(.*\)$|Libs: \1 $EXPLIB|" $PF/fontconfig-$TAG/lib/pkgconfig/fontconfig.pc)
+  if [ -f fc-$TAG/configure ]; then
+    (cd fc-$TAG && PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig ./configure $HOST --disable-shared --enable-static --disable-docs --disable-libxml2 --with-expat=$PF/expat-$TAG --prefix=$PF/fontconfig-$TAG && make -C src fcalias.h fcaliastail.h fcftalias.h fcftaliastail.h fcobjshash.h && make -C src libfontconfig.la && make -C src install && make -C fontconfig install && mkdir -p $PF/fontconfig-$TAG/lib/pkgconfig && cp -f fontconfig.pc $PF/fontconfig-$TAG/lib/pkgconfig/)
+  else
+    echo "fontconfig 无 configure，走 meson 构建" >&2
+    (cd fc-$TAG && PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig meson setup --cross-file /tmp/meson-mac-$TAG.ini -Ddoc=disabled -Ddoc-txt=disabled -Ddoc-man=disabled -Ddoc-html=disabled -Dtests=disabled -Dtools=disabled -Dnls=disabled -Dcache-build=disabled --default-library=static --libdir=lib --prefix=$PF/fontconfig-$TAG build && ninja -C build && ninja -C build install)
+    rm -f $PF/fontconfig-$TAG/lib/libfontconfig.*.dylib
+    mkdir -p $PF/fontconfig-$TAG/lib/pkgconfig
+    (cd fc-$TAG && cp -f build/meson-private/fontconfig.pc $PF/fontconfig-$TAG/lib/pkgconfig/ 2>/dev/null || cp -f build/src/fontconfig.pc $PF/fontconfig-$TAG/lib/pkgconfig/ 2>/dev/null || true)
+    test -f $PF/fontconfig-$TAG/lib/pkgconfig/fontconfig.pc || { echo "FAIL: fontconfig.pc 没落下" >&2; exit 3; }
+  fi
+  EXPLIB=$(PKG_CONFIG_PATH=$PF/expat-$TAG/lib/pkgconfig pkg-config --libs expat 2>/dev/null || echo "-L$PF/expat-$TAG/lib -lexpat")
+  sed -i '' "s|^Libs: \(.*\)$|Libs: \1 $EXPLIB|" $PF/fontconfig-$TAG/lib/pkgconfig/fontconfig.pc
   check_arch $PF/fontconfig-$TAG/lib/libfontconfig.a $OARCH
 
   # libunibreak（静态，libass 的断行依赖；brew 只有 arm64 瓶，

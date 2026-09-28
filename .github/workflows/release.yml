@@ -55,9 +55,10 @@ jobs:
       - name: Build toolchain image (ubuntu18, 老glibc兼容)
         run: docker build -f dual/Dockerfile -t ffbuild-dual .
 
-      - name: 备外库料（下源码包+验包）
+      - name: 备外库料（本仓 third_party 预置包，容器内拷贝+验包）
         run: |
           docker run --rm \
+            -v "$PWD:/src" \
             -v /tmp/deps:/tmp/deps \
             -e FREETYPE_VER -e HARFBUZZ_VER -e FRIBIDI_VER \
             -e FONTCONFIG_VER -e LIBASS_VER -e OPENH264_VER \
@@ -68,6 +69,7 @@ jobs:
       - name: 编外库静态 .a（base 只用其中 openssl+zlib）
         run: |
           docker run --rm \
+            -v "$PWD:/src" \
             -v /tmp/deps:/tmp/deps \
             -v /tmp/depopt:/opt \
             -e FREETYPE_VER -e HARFBUZZ_VER -e FRIBIDI_VER \

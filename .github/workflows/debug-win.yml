@@ -51,10 +51,11 @@ jobs:
           cd dual && go run ./recipe -variant "$VARIANT" > "/tmp/recipe-$VARIANT.flags"
           head -c 300 "/tmp/recipe-$VARIANT.flags"; echo
 
-      - name: 备外库料（下源码包+验包，base 只用其中 zlib）
+      - name: 备外库料（本仓 third_party 预置包，容器内拷贝+验包，base 只用其中 zlib）
         run: |
           docker build -f dual/Dockerfile -t ffbuild-dual .
           docker run --rm \
+            -v "$PWD:/src" \
             -v /tmp/deps:/tmp/deps \
             -e FREETYPE_VER=2.13.2 -e HARFBUZZ_VER=8.3.0 -e FRIBIDI_VER=1.0.13 \
             -e FONTCONFIG_VER=2.15.0 -e LIBASS_VER=0.17.1 -e OPENH264_VER=2.4.1 \
@@ -68,6 +69,7 @@ jobs:
             win-x64) DEPARCH=w64 ;; win-arm64) DEPARCH=w64arm ;;
           esac
           docker run --rm \
+            -v "$PWD:/src" \
             -v /tmp/deps:/tmp/deps \
             -v /tmp/depopt:/opt \
             -e FREETYPE_VER=2.13.2 -e HARFBUZZ_VER=8.3.0 -e FRIBIDI_VER=1.0.13 \

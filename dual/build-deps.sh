@@ -23,7 +23,17 @@ ZL=${ZLIB_VER:-1.3.1}
 EXPAT=${EXPAT_VER:-2.6.4}
 
 need() { # file url [fallback-url]
-  if [ -f "$1" ]; then return 0; fi
+  # 第一优先级：本仓 third_party 预置包（离线可用，CI 不再碰外网）。
+  # 脚本在容器里跑，third_party 挂在 /src/third_party（见 yml 的 -v 挂载）。
+  if [ ! -f "$1" ]; then
+    for cand in "/src/third_party/$1" "$(dirname "$0")/../third_party/$1"; do
+      if [ -f "$cand" ]; then cp -f "$cand" "$1"; break; fi
+    done
+  fi
+  if [ -f "$1" ]; then
+    if verify "$1" 2>/dev/null; then return 0; fi
+    echo "local $1 bad, removing" >&2; rm -f "$1"
+  fi
   # -f：HTTP 错误直接失败（不把 404 页面存成包）；下完先验包，
   # 主源是坏包就换备用源重下（实测 zlib.net 回的不是 gzip）。
   if curl -fSL --retry 3 --retry-all-errors --max-time 120 -o "$1" "$2" && verify "$1" 2>/dev/null; then
@@ -215,10 +225,32 @@ EOF
   # fribidi + fontconfig + libass（静态；fribidi 同样钉 --libdir=lib）。
   rm -rf fb-$TAG && mkdir fb-$TAG && tar -xJf fribidi-$FB.tar.xz -C fb-$TAG --strip-components=1
   (cd fb-$TAG && CC="$CC" CFLAGS="$MESON_CFLAGS" meson setup $meson_cross -Dtests=false -Ddocs=false -Dbin=false --default-library=static --libdir=lib --prefix=$PF/fribidi-$TAG build && ninja -C build && ninja -C build install)
-  rm -rf fc-$TAG && mkdir fc-$TAG && tar -xzf fontconfig-$FC.tar.gz -C fc-$TAG --strip-components=1 && test -f fc-$TAG/configure || { echo "FAIL: fontconfig 包不含 configure（疑似坏包）" >&2; ls -la fc-$TAG | head; exit 3; }
-  # LDFLAGS 指到自建 zlib-$TAG：fc-cache 等工具二进制要链 -lz，交叉目标（386/arm64/arm）
-  # 在宿主 /usr/lib 下只有 x86_64 的 libz 会炸（实测 386 挂在 fc-cache 链接上），库本身不欠账。
-  (cd fc-$TAG && CC="$CC" CFLAGS="-fPIC" LDFLAGS="-L$PF/zlib-$TAG/lib" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig:$PF/zlib-$TAG/lib/pkgconfig ./configure $FT_HOST --disable-shared --enable-static --disable-docs --disable-libxml2 --with-expat=$PF/expat-$TAG --prefix=$PF/fontconfig-$TAG && make -j"$(nproc)" && make install)
+  rm -rf fc-$TAG && mkdir fc-$TAG && tar -xzf fontconfig-$FC.tar.gz -C fc-$TAG --strip-components=1
+  # fontconfig 有两种包：官网 release（含 configure，走 autotools）与
+  # GitHub 镜像（纯源码树，无 configure，走 meson；本仓预置的是后者）。
+  if [ -f fc-$TAG/configure ]; then
+    # LDFLAGS 指到自建 zlib-$TAG：fc-cache 等工具二进制要链 -lz，交叉目标（386/arm64/arm）
+    # 在宿主 /usr/lib 下只有 x86_64 的 libz 会炸（实测 386 挂在 fc-cache 链接上），库本身不欠账。
+    (cd fc-$TAG && CC="$CC" CFLAGS="-fPIC" LDFLAGS="-L$PF/zlib-$TAG/lib" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/fribidi-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig:$PF/zlib-$TAG/lib/pkgconfig ./configure $FT_HOST --disable-shared --enable-static --disable-docs --disable-libxml2 --with-expat=$PF/expat-$TAG --prefix=$PF/fontconfig-$TAG && make -j"$(nproc)" && make -C src libfontconfig.la && make -C src install && make -C fontconfig install)
+  else
+    echo "fontconfig 无 configure，走 meson 构建" >&2
+    FCMESON_CROSS=""
+    case "$TAG" in
+      x64) ;;
+      arm64) FCMESON_CROSS="--cross-file /tmp/meson-cross-arm64.ini" ;;
+      arm) FCMESON_CROSS="--cross-file /tmp/meson-cross-arm.ini" ;;
+      386) FCMESON_CROSS="--cross-file /tmp/meson-cross-386.ini" ;;
+      w64) FCMESON_CROSS="--cross-file /tmp/meson-cross-w64.ini" ;;
+      w64arm) FCMESON_CROSS="--cross-file /tmp/meson-cross-w64arm.ini" ;;
+    esac
+    (cd fc-$TAG && CC="$CC" CFLAGS="-fPIC" PKG_CONFIG_PATH=$PF/freetype-$TAG/lib/pkgconfig:$PF/expat-$TAG/lib/pkgconfig:$PF/zlib-$TAG/lib/pkgconfig meson setup $FCMESON_CROSS -Ddoc=disabled -Ddoc-txt=disabled -Ddoc-man=disabled -Ddoc-html=disabled -Dtests=disabled -Dtools=disabled -Dnls=disabled -Dcache-build=disabled --default-library=static --libdir=lib --prefix=$PF/fontconfig-$TAG build && ninja -C build && ninja -C build install)
+  fi
+  rm -f $PF/fontconfig-$TAG/lib/libfontconfig.so* $PF/fontconfig-$TAG/lib/libfontconfig.dylib
+  mkdir -p $PF/fontconfig-$TAG/lib/pkgconfig
+  (cd fc-$TAG && cp -f fontconfig.pc $PF/fontconfig-$TAG/lib/pkgconfig/ 2>/dev/null || cp -f build/meson-private/fontconfig.pc $PF/fontconfig-$TAG/lib/pkgconfig/ 2>/dev/null || cp -f build/src/fontconfig.pc $PF/fontconfig-$TAG/lib/pkgconfig/ 2>/dev/null || true)
+  test -f $PF/fontconfig-$TAG/lib/pkgconfig/fontconfig.pc || { echo "FAIL: fontconfig.pc 没落下" >&2; exit 3; }
+  EXPLIB=$(PKG_CONFIG_PATH=$PF/expat-$TAG/lib/pkgconfig pkg-config --libs expat 2>/dev/null || echo "-L$PF/expat-$TAG/lib -lexpat")
+  sed "s|^Libs: \(.*\)$|Libs: \1 $EXPLIB|" $PF/fontconfig-$TAG/lib/pkgconfig/fontconfig.pc > /tmp/fc.pc && mv /tmp/fc.pc $PF/fontconfig-$TAG/lib/pkgconfig/fontconfig.pc
   rm -rf as-$TAG && mkdir as-$TAG && tar -xzf libass-$ASS.tar.gz -C as-$TAG --strip-components=1
   # fontconfig 开着（系统字体查找要它；静态 .a 上一步已备好，不欠动态账）。
   # 交叉同样递 --host（libass 的 configure 也要明说）。

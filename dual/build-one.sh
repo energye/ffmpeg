@@ -57,7 +57,12 @@ if [ "$V" = "full" ]; then
       export PKG_CONFIG_PATH="/opt/$d-$DETSFX/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
     done
   fi
-  want_pc="libfreetype:freetype2 libharfbuzz:harfbuzz libfontconfig:fontconfig libfribidi:fribidi libass:libass libopenh264:openh264"
+  # openh264 2.6.0 的特例：库里删了版本探针 WelsGetCodecVersion（头有声明，
+  # 实现没了；实测 2.6.0 的 welsEncoderExt.cpp 只有 WelsCreateSVCEncoder，
+  # w64arm 试链报 undefined symbol: WelsGetCodecVersion）。
+  # configure 原生查旧探针必挂，这里改查创建函数 WelsCreateSVCEncoder
+  #（libopenh264enc.c 实际只用它，功能等价）。
+  want_pc="libfreetype:freetype2 libharfbuzz:harfbuzz libfontconfig:fontconfig libfribidi:fribidi libass:libass"
   for pair in $want_pc; do
     lib="${pair%%:*}"; pc="${pair##*:}"
     if pkg-config --exists "$pc" 2>/dev/null; then
@@ -67,6 +72,12 @@ if [ "$V" = "full" ]; then
       FULL_DROP="$FULL_DROP --enable-$lib"
     fi
   done
+  if pkg-config --exists openh264 2>/dev/null; then
+    FULL_DEPS_LINUX="$FULL_DEPS_LINUX --enable-libopenh264"
+  else
+    echo "WARN: 缺外库 openh264，丢掉 --enable-libopenh264（本次 full 无 H264 编码）" >&2
+    FULL_DROP="$FULL_DROP --enable-libopenh264"
+  fi
   # 连带滤镜：subtitles/ass 要 libass；drawtext 要 freetype+harfbuzz。
   # 缺库时把对应 --enable-filter= 一起丢掉，否则 configure 直接报错退出。
   case "$FULL_DROP" in

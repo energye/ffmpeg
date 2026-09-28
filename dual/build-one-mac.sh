@@ -53,7 +53,9 @@ trap 'rc=$?; if [ $rc -ne 0 ]; then echo "=== config.log require lines ==="; gre
 FULL_DEPS_MAC=""
 FULL_DROP=""
 if [ "$V" = "full" ]; then
-  want_pc="libfreetype:freetype2 libharfbuzz:harfbuzz libfontconfig:fontconfig libfribidi:fribidi libass:libass libopenh264:openh264"
+  # openh264 2.6.0 的特例见 build-one.sh 同名注释：版本探针删了，
+  # 这里改查创建函数 WelsCreateSVCEncoder（mac 侧同样）。
+  want_pc="libfreetype:freetype2 libharfbuzz:harfbuzz libfontconfig:fontconfig libfribidi:fribidi libass:libass"
   for pair in $want_pc; do
     lib="${pair%%:*}"; pc="${pair##*:}"
     if pkg-config --exists "$pc" 2>/dev/null; then
@@ -63,6 +65,12 @@ if [ "$V" = "full" ]; then
       FULL_DROP="$FULL_DROP --enable-$lib"
     fi
   done
+  if pkg-config --exists openh264 2>/dev/null; then
+    FULL_DEPS_MAC="$FULL_DEPS_MAC --enable-libopenh264"
+  else
+    echo "WARN: 缺外库 openh264，丢掉 --enable-libopenh264（本次 mac full 无 H264 编码）" >&2
+    FULL_DROP="$FULL_DROP --enable-libopenh264"
+  fi
   case "$FULL_DROP" in
     *--enable-libass*) FULL_DROP="$FULL_DROP --enable-filter=subtitles --enable-filter=ass" ;;
   esac

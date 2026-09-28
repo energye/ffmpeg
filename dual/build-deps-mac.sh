@@ -83,8 +83,9 @@ build_one_arch() { # arch-tag
   check_arch $PF/freetype-$TAG/lib/libfreetype.a $OARCH
 
   # meson 交叉描述（Darwin 同系统跨架构，native 配 CFLAGS 不认，必须明说）。
-  # 注意：CPU 名用 meson 短名；-arch 旗标放 [properties] meson 会吞
-  # （实测 015 丢旗全变 arm64），改放 [built-in options]。
+  # 注意：-arch 旗标放 [properties] 会被吞（实测 015 全变 arm64），放
+  # [built-in options] 才进编译行；且必须同时给 c_* 和 cpp_*（harfbuzz
+  # 主体是 C++，只给 c_* 的话 C++ 对象还是 arm64）。
   cat > /tmp/meson-mac-$TAG.ini <<EOF
 [binaries]
 c = 'clang'
@@ -92,6 +93,15 @@ cpp = 'clang++'
 ar = 'ar'
 strip = 'strip'
 pkgconfig = 'pkg-config'
+c_args = ['-arch', '$OARCH']
+c_link_args = ['-arch', '$OARCH']
+cpp_args = ['-arch', '$OARCH']
+cpp_link_args = ['-arch', '$OARCH']
+[properties]
+c_args = ['-arch', '$OARCH']
+c_link_args = ['-arch', '$OARCH']
+cpp_args = ['-arch', '$OARCH']
+cpp_link_args = ['-arch', '$OARCH']
 [built-in options]
 c_args = ['-arch', '$OARCH']
 c_link_args = ['-arch', '$OARCH']

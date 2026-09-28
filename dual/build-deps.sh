@@ -227,8 +227,18 @@ EOF
   # 注意：install 也要带同一套 CC/CXX/ARCH/USE_ASM——它的依赖会触发二次构建，
   # 不带就是本机默认（64 位+开汇编），会把刚编好的 32 位 .o 混成 64 位再链，
   # 直接炸（实测 386 挂在 libopenh264.so.2.4.1 的 -m64 重链上）。
+  # Windows（w64/w64arm）：宿主 uname 是 linux，openh264 按 linux 规则
+  # 拼动态库链接（-soname，走 lld 不认，直接炸），其实我们只要静态 .a。
+  # 先只编静态库装上（install-static-lib+头+静态版 .pc），跳过动态那半。
   rm -rf h264-$TAG && mkdir h264-$TAG && tar -xzf openh264-$H264.tar.gz -C h264-$TAG --strip-components=1
-  (cd h264-$TAG && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No -j"$(nproc)" && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG install && rm -f $PF/openh264-$TAG/lib/libopenh264.so*)
+  case "$TAG" in
+    w64|w64arm)
+      (cd h264-$TAG && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No -j"$(nproc)" libopenh264.a && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG install-static-lib && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG openh264-static.pc && mkdir -p $PF/openh264-$TAG/lib/pkgconfig && cp -f openh264-static.pc $PF/openh264-$TAG/lib/pkgconfig/openh264.pc)
+      ;;
+    *)
+      (cd h264-$TAG && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No -j"$(nproc)" && make CC="$CC" CXX="$CXX" ARCH=$(arch_map "$TAG") USE_ASM=No PREFIX=$PF/openh264-$TAG install && rm -f $PF/openh264-$TAG/lib/libopenh264.so*)
+      ;;
+  esac
 }
 
 arch_map() {
